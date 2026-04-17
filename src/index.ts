@@ -1,5 +1,4 @@
-import { withX402Payment } from "@ampersend_ai/ampersend-sdk/mcp/server/fastmcp";
-import { FastMCP } from "fastmcp";
+import { withX402Payment, FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/server/fastmcp";
 import { z } from "zod";
 
 // TODO: Update server name and version to match your application
@@ -20,14 +19,11 @@ mcp.addTool({
         description: "Payment for tool execution",
         network: "base-sepolia" as const, // TODO: Change network as needed (base, polygon, etc.)
         maxAmountRequired: "1000000", // TODO: Set your actual payment amount in wei/smallest unit
-        resource: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual resource address
-        to: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual recipient address
-        receiver: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual receiver address
-        chainId: 84532, // Base Sepolia testnet - TODO: Update if using different network
+        resource: "paid_tool", // Resource identifier for this tool
         mimeType: "application/json",
-        payTo: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual payment recipient
+        payTo: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", // TODO: Replace with actual payment recipient address
         maxTimeoutSeconds: 300,
-        asset: "0x0000000000000000000000000000000000000000", // TODO: Replace with actual token address (0x0 for native token)
+        asset: "0x0000000000000000000000000000000000000000", // Native token (ETH) - use token address for ERC20
       };
     },
     // Called after payment is received to verify it
