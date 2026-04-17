@@ -3,7 +3,10 @@ import { FastMCP } from "fastmcp";
 import { z } from "zod";
 
 // TODO: Update server name and version to match your application
-const mcp = new FastMCP({ name: "my-server", version: "1.0.0" });
+const mcp = new FastMCP({
+  name: "my-server",
+  version: "1.0.0"
+});
 
 mcp.addTool({
   name: "paid_tool",
@@ -41,3 +44,14 @@ mcp.addTool({
     return "result";
   }),
 });
+
+// Start the MCP server with HTTP transport
+mcp.start({
+  transportType: "httpStream",
+  httpStream: {
+    port: 8000,
+    endpoint: "/mcp"
+  }
+});
+
+console.log("🚀 MCP Server running on http://localhost:8000/mcp");
