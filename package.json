@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ampersend_ai/ampersend-sdk": "^0.0.16",
+    "@remix-project/remix-solidity": "^0.5.76",
     "dotenv": "^17.4.2",
     "fastmcp": "^4.0.0",
     "zod": "^4.3.6"
