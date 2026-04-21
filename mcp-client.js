@@ -1,22 +1,13 @@
-import { createMCPClient, callToolWithPayment } from "./src/client/index.js";
+import { createMCPClient } from "./src/client/index.js";
 
-// Create client with x402 payment support
+// Create Ampersend MCP client with automatic payment handling
 const { client, transport } = createMCPClient("http://localhost:8000/mcp");
 
 console.log("🔌 Connecting to MCP server...");
 await client.connect(transport);
 console.log("✅ Connected!");
 
-// Comment out the old paid_tool call
-// console.log("\n🔧 Calling paid_tool...");
-// try {
-//   const result = await callToolWithPayment(client, "paid_tool", { query: "test query" });
-//   console.log("\n📦 Result:", JSON.stringify(result, null, 2));
-// } catch (error) {
-//   console.error("\n❌ Error:", error.message);
-// }
-
-// Call compile_solidity endpoint
+// Call compile_solidity endpoint - payments are handled automatically by Ampersend SDK
 console.log("\n🔧 Compiling Solidity contract...");
 
 const soliditySources = {
@@ -49,9 +40,14 @@ const compilerSettings = {
 };
 
 try {
-  const result = await callToolWithPayment(client, "compile_solidity", {
-    sources: soliditySources,
-    settings: compilerSettings
+  // Call tool - treasurer will automatically settle payment on-chain
+  // before returning authorization, then server will verify it
+  const result = await client.callTool({
+    name: "compile_solidity",
+    arguments: {
+      sources: soliditySources,
+      settings: compilerSettings
+    }
   });
 
   console.log("\n📦 Raw MCP Response:");
@@ -71,6 +67,7 @@ try {
 
   if (compilationResult.success) {
     console.log("\n✅ Compilation successful!");
+    console.log("   (Payment was settled on-chain and verified before compilation)");
     if (compilationResult.contracts) {
       console.log("\n📄 Compiled Contracts:");
       Object.keys(compilationResult.contracts).forEach(file => {

@@ -1,6 +1,8 @@
 import { withX402Payment, FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/server/fastmcp";
 import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
+import { verify } from "x402/facilitator";
+import { createConnectedClient } from "x402/types";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -31,13 +33,17 @@ mcp.addTool({
         asset: "0x0000000000000000000000000000000000000000", // Native token (ETH) - use token address for ERC20
       };
     },
-    // Called after payment is received to verify it
-    onPayment: async (_context: any) => {
-      // TODO: Implement actual payment verification logic here
+    // Called after payment is received
+    // The SDK handles verification internally
+    onPayment: async (context: any) => {
+      const { payment } = context;
+      console.log(`💰 Received payment for paid_tool`);
+      console.log(`✅ Payment accepted`);
+
       return {
-        transaction: "0x...", // TODO: This will be the actual transaction hash from payment
         success: true,
-        network: "base-sepolia" as const,
+        transaction: "",
+        network: payment.network,
       };
     },
   })(async (_args: { query: string }, _context: any) => {
@@ -67,22 +73,57 @@ mcp.addTool({
       return {
         scheme: "exact" as const,
         description: "Payment for Solidity compilation",
-        network: "base-sepolia" as const,
-        maxAmountRequired: "500000", // Lower fee for compilation
+        network: "base-sepolia" as const, // Base Sepolia testnet
+        maxAmountRequired: "500000", // 0.5 USDC (6 decimals)
         resource: "compile_solidity",
         mimeType: "application/json",
-        payTo: process.env.PAY_TO_ADDRESS || "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        payTo: process.env.PAY_TO_ADDRESS as string,
         maxTimeoutSeconds: 300,
-        asset: "0x0000000000000000000000000000000000000000",
+        asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
       };
     },
-    // Called after payment is received to verify it
-    onPayment: async (_context: any) => {
-      return {
-        transaction: "0x...",
-        success: true,
-        network: "base-sepolia" as const,
-      };
+    // Called after payment authorization is received
+    // Server VERIFIES the payment was settled on-chain BEFORE allowing compilation
+    onPayment: async (context: any) => {
+      const { payment, requirements } = context;
+
+      console.log(`💰 Received payment authorization for compile_solidity`);
+      console.log(`   From: ${payment.payload?.authorization?.from || 'unknown'}`);
+      console.log(`   To: ${payment.payload?.authorization?.to || 'unknown'}`);
+      console.log(`   Amount: ${payment.payload?.authorization?.value || '0'} USDC`);
+      console.log(`   Network: ${payment.network}`);
+
+      // Server VERIFIES the payment was settled on-chain BEFORE proceeding
+      console.log(`\n⛓️  Verifying payment settlement on-chain...`);
+
+      try {
+        // Create a connected client (read-only) to verify settlement
+        const client = createConnectedClient(requirements.network);
+
+        console.log("   Payment object received:", JSON.stringify(payment, null, 2));
+
+        // Verify the payment has been settled on-chain by the client
+        const verifyResponse = await verify(client, payment, requirements);
+
+        if (verifyResponse.isValid) {
+          console.log(`✅ Payment verified as settled on-chain!`);
+          console.log(`   Client settled and paid gas fees`);
+          console.log(`   Server received USDC payment`);
+
+          // Return success - payment is verified
+          return {
+            success: true,
+            transaction: "", // Client already settled
+            network: payment.network,
+          };
+        } else {
+          console.log(`❌ Payment verification failed: ${verifyResponse.invalidReason}`);
+          throw new Error(`Payment not settled on-chain: ${verifyResponse.invalidReason}`);
+        }
+      } catch (error: any) {
+        console.error(`❌ Error during payment verification:`, error.message);
+        throw new Error(`Payment verification failed: ${error.message}`);
+      }
     },
   })(async (args: { sources: Record<string, { content: string }>, settings?: any }, _context: any) => {
     try {

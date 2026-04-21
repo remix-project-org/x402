@@ -1,55 +1,47 @@
-import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@ampersend_ai/ampersend-sdk/mcp/client";
+import { Client } from "@ampersend_ai/ampersend-sdk/mcp/client";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { NaiveTreasurer } from "./treasurer.js";
-import { X402TransportWrapper } from "./transport.js";
-import { createWallet } from "./wallet.js";
+import { USDCWallet } from "./usdc-wallet.js";
+import { privateKeyToAccount } from "viem/accounts";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 /**
- * Creates and configures an MCP client with x402 payment support
+ * Creates and configures an MCP client with x402 payment support using AccountWallet
  * @param {string} serverUrl - The MCP server URL
  * @param {Object} clientInfo - Client information (name, version)
  * @returns {Object} Configured client and transport
  */
 export function createMCPClient(serverUrl, clientInfo = { name: "MyMCPClient", version: "1.0.0" }) {
-  // Initialize wallet and treasurer
-  const wallet = createWallet();
+  const privateKey = process.env.PRIVATE_KEY || process.env.SAMPLE_PRIVATE_KEY;
+
+  if (!privateKey) {
+    throw new Error("PRIVATE_KEY must be set in .env file");
+  }
+
+  // Create viem account from private key
+  const account = privateKeyToAccount(privateKey);
+
+  // Create custom USDC wallet with proper EIP-712 signatures
+  const wallet = new USDCWallet(account);
+
+  // Create treasurer
   const treasurer = new NaiveTreasurer(wallet);
 
-  // Create MCP client
-  const client = new McpClient(
+  // Create Ampersend MCP Client with treasurer
+  const client = new Client(
     clientInfo,
-    { capabilities: { tools: {} } }
+    {
+      treasurer,
+      mcpOptions: { capabilities: { tools: {} } }
+    }
   );
 
-  // Create transport with x402 payment support
+  // Create transport
   const transport = new StreamableHTTPClientTransport(new URL(serverUrl));
-  new X402TransportWrapper(transport, treasurer);
 
-  return { client, transport };
-}
+  console.log(`💼 Wallet address: ${wallet.address}`);
 
-/**
- * Calls a tool on the MCP server with automatic payment retry support
- * @param {McpClient} client - The MCP client instance
- * @param {string} toolName - Name of the tool to call
- * @param {Object} args - Tool arguments
- * @returns {Promise<Object>} Tool result
- */
-export async function callToolWithPayment(client, toolName, args) {
-  let retryResolver;
-  const retryPromise = new Promise((resolve) => { retryResolver = resolve; });
-  globalThis.__retryResolver = retryResolver;
-
-  try {
-    const result = await client.callTool({ name: toolName, arguments: args });
-    return result;
-  } catch (error) {
-    if (error.code === 402) {
-      console.log("\n⏳ Waiting for payment retry...");
-      const retryResult = await retryPromise;
-      return retryResult;
-    } else {
-      throw error;
-    }
-  }
+  return { client, transport, treasurer, wallet };
 }
