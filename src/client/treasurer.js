@@ -7,7 +7,7 @@ dotenv.config();
 /**
  * Treasurer that auto-approves and IMMEDIATELY settles payments on-chain
  */
-export class NaiveTreasurer {
+export class Treasurer {
   constructor(wallet) {
     this.wallet = wallet;
     this.lastPayment = null;

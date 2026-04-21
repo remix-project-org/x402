@@ -1,6 +1,6 @@
 import { Client } from "@ampersend_ai/ampersend-sdk/mcp/client";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { NaiveTreasurer } from "./treasurer.js";
+import { Treasurer } from "./treasurer.js";
 import { USDCWallet } from "./usdc-wallet.js";
 import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
@@ -27,7 +27,7 @@ export function createMCPClient(serverUrl, clientInfo = { name: "MyMCPClient", v
   const wallet = new USDCWallet(account);
 
   // Create treasurer
-  const treasurer = new NaiveTreasurer(wallet);
+  const treasurer = new Treasurer(wallet);
 
   // Create Ampersend MCP Client with treasurer
   const client = new Client(
