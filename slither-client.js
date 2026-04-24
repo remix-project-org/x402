@@ -58,9 +58,6 @@ try {
     }
   });
 
-  console.log("\n📊 Raw MCP Response:");
-  console.log(JSON.stringify(result, null, 2));
-
   // Parse the result from MCP tool response
   let analysisResult;
   if (result.content && result.content[0] && result.content[0].text) {
@@ -68,9 +65,6 @@ try {
   } else {
     analysisResult = result;
   }
-
-  console.log("\n🔍 Slither Analysis Result:");
-  console.log(JSON.stringify(analysisResult, null, 2));
 
   if (analysisResult.success) {
     console.log("\n✅ Analysis completed successfully!");
@@ -86,15 +80,24 @@ try {
     console.log(`   Optimization: ${summary.optimization}`);
 
     if (analysisResult.findings && analysisResult.findings.length > 0) {
-      console.log("\n🐛 Key Findings:");
-      analysisResult.findings.slice(0, 5).forEach((finding, idx) => {
+      console.log("\n🐛 Detailed Findings:");
+      analysisResult.findings.forEach((finding, idx) => {
         console.log(`\n  ${idx + 1}. [${finding.impact}] ${finding.check}`);
-        console.log(`     ${finding.description.split('\n')[0]}`);
+        console.log(`     Confidence: ${finding.confidence}`);
+        if (finding.description) {
+          // Print first few lines of description
+          const descLines = finding.description.split('\n').filter(line => line.trim());
+          descLines.slice(0, 3).forEach(line => {
+            console.log(`     ${line}`);
+          });
+          if (descLines.length > 3) {
+            console.log(`     ... (${descLines.length - 3} more lines)`);
+          }
+        }
+        if (finding.reference) {
+          console.log(`     Reference: ${finding.reference}`);
+        }
       });
-
-      if (analysisResult.findings.length > 5) {
-        console.log(`\n  ... and ${analysisResult.findings.length - 5} more findings`);
-      }
     }
   } else {
     console.log("\n❌ Analysis failed!");
