@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server/index.js",
     "dev": "ts-node src/server/index.ts",
-    "client": "node mcp-client.js"
+    "compile": "node compile-solidity-client.js",
+    "slither": "node slither-client.js"
   },
   "author": "Aniket-Engg",
   "license": "ISC",

@@ -1,6 +1,6 @@
 # x402 MCP Server
 
-An MCP (Model Context Protocol) server implementing the x402 payment protocol for paid Solidity compilation services using USDC on Base Sepolia.
+An MCP (Model Context Protocol) server implementing the x402 payment protocol for paid Solidity development tools using USDC on Base Sepolia.
 
 ## Overview
 
@@ -12,6 +12,7 @@ This project demonstrates a complete x402 payment flow where:
 ## Features
 
 - **Paid Solidity Compilation**: Compile Solidity contracts using Remix compiler (0.5 USDC per compilation)
+- **Paid Slither Analysis**: Security analysis of Solidity contracts using Slither (0.75 USDC per analysis)
 - **x402 Payment Protocol**: Fully compliant implementation with on-chain settlement verification
 - **USDC Payments**: ERC-20 token payments on Base Sepolia testnet
 - **Custom Wallet**: EIP-712 signature implementation for USDC compatibility
@@ -33,6 +34,7 @@ This project demonstrates a complete x402 payment flow where:
 - Node.js (v18 or higher)
 - USDC on Base Sepolia testnet
 - Private key for your wallet
+- Slither (for security analysis tool): `pip install slither-analyzer`
 
 ## Installation
 
@@ -78,10 +80,12 @@ yarn start
 
 The server will start on `http://localhost:8000/mcp`
 
-### 2. Run the Client
+### 2. Run the Clients
+
+#### Solidity Compilation Client
 
 ```bash
-yarn run client
+npm run compile
 ```
 
 The client will:
@@ -93,6 +97,19 @@ The client will:
 6. Re-request with payment proof
 7. Server verifies settlement on-chain
 8. Compilation executes and returns results
+
+#### Slither Analysis Client
+
+```bash
+npm run slither
+```
+
+The client will:
+1. Connect to the MCP server
+2. Request the `analyze_with_slither` tool
+3. Handle payment flow (same as above)
+4. Run Slither security analysis on the contract
+5. Return findings organized by severity level
 
 ## Payment Flow
 
@@ -138,6 +155,36 @@ Compiles Solidity contracts using the Remix compiler.
     optimizer: { enabled: true, runs: 200 },
     evmVersion: "london"
   }
+}
+```
+
+### analyze_with_slither
+
+Runs Slither security analysis on Solidity contracts to detect vulnerabilities, optimization opportunities, and best practice violations.
+
+**Payment Required**: 0.75 USDC (750000 with 6 decimals)
+
+**Parameters**:
+- `sources`: Object with contract filenames as keys and their content
+- `detectors` (optional): Array of specific detectors to run (e.g., `['reentrancy-eth', 'tx-origin']`)
+- `excludeInformational` (optional): Filter out informational severity findings
+- `excludeLow` (optional): Filter out low severity findings
+
+**Returns**:
+- Summary with counts by severity (High, Medium, Low, Informational, Optimization)
+- Detailed findings with impact, confidence, description, and source locations
+- Raw Slither JSON output
+
+**Example**:
+```javascript
+{
+  sources: {
+    "VulnerableBank.sol": {
+      content: "contract VulnerableBank { ... }"
+    }
+  },
+  excludeInformational: false,
+  excludeLow: false
 }
 ```
 
