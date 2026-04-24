@@ -27,14 +27,14 @@ This project demonstrates a complete x402 payment flow where:
 
 ### Server Side
 - `src/server/index.ts` - MCP server with payment-gated tools
-- Verifies payment settlement on-chain before executing compilation
+- Verifies payment settlement on-chain before executing tools
+- Integrates with Remix API for Slither analysis
 
 ## Prerequisites
 
 - Node.js (v18 or higher)
 - USDC on Base Sepolia testnet
 - Private key for your wallet
-- Slither (for security analysis tool): `pip install slither-analyzer`
 
 ## Installation
 
@@ -106,10 +106,14 @@ npm run slither
 
 The client will:
 1. Connect to the MCP server
-2. Request the `analyze_with_slither` tool
-3. Handle payment flow (same as above)
-4. Run Slither security analysis on the contract
-5. Return findings organized by severity level
+2. Request the `analyze_with_slither` tool with a vulnerable contract
+3. Handle payment flow (same as compilation flow)
+4. Server forwards request to Remix Slither API
+5. Receive detailed security findings organized by severity:
+   - High severity issues (reentrancy, etc.)
+   - Medium severity issues (tx.origin, etc.)
+   - Low severity issues (naming conventions, etc.)
+   - Informational findings
 
 ## Payment Flow
 
@@ -160,20 +164,51 @@ Compiles Solidity contracts using the Remix compiler.
 
 ### analyze_with_slither
 
-Runs Slither security analysis on Solidity contracts to detect vulnerabilities, optimization opportunities, and best practice violations.
+Runs Slither security analysis on Solidity contracts using the Remix API endpoint to detect vulnerabilities, optimization opportunities, and best practice violations.
 
 **Payment Required**: 0.75 USDC (750000 with 6 decimals)
 
+**API Endpoint**: `https://mcp.api.remix.live/slither/analyze`
+
 **Parameters**:
 - `sources`: Object with contract filenames as keys and their content
-- `detectors` (optional): Array of specific detectors to run (e.g., `['reentrancy-eth', 'tx-origin']`)
+- `version` (optional): Solidity compiler version (e.g., `"0.8.26+commit.8a97fa7a"`). Defaults to `0.8.26`
+- `detectors` (optional): Array of specific detectors to run (e.g., `['reentrancy-eth', 'tx-origin']`). Filters results client-side.
 - `excludeInformational` (optional): Filter out informational severity findings
 - `excludeLow` (optional): Filter out low severity findings
 
 **Returns**:
+```javascript
+{
+  "success": true,
+  "summary": {
+    "totalFindings": 4,
+    "high": 1,
+    "medium": 0,
+    "low": 3,
+    "informational": 0,
+    "optimization": 0
+  },
+  "findings": [
+    {
+      "check": "reentrancy-eth",
+      "impact": "High",
+      "confidence": "Medium",
+      "description": "Reentrancy in VulnerableBank.withdraw...",
+      "reference": "https://github.com/crytic/slither/wiki/..."
+    }
+    // ... more findings
+  ],
+  "rawAnalysis": "Full Slither text output",
+  "rawOutput": { /* Remix API response */ }
+}
+```
+
+**Output includes**:
 - Summary with counts by severity (High, Medium, Low, Informational, Optimization)
-- Detailed findings with impact, confidence, description, and source locations
-- Raw Slither JSON output
+- Detailed findings with detector name, impact level, confidence, and description
+- Reference URLs to Slither documentation for each detector
+- Raw analysis text and API response for advanced use
 
 **Example**:
 ```javascript
@@ -183,10 +218,19 @@ Runs Slither security analysis on Solidity contracts to detect vulnerabilities, 
       content: "contract VulnerableBank { ... }"
     }
   },
+  version: "0.8.26+commit.8a97fa7a",
   excludeInformational: false,
   excludeLow: false
 }
 ```
+
+**Impact Level Classification**:
+- **High**: `reentrancy-eth`, `reentrancy-no-eth`, `suicidal`, `unprotected-upgrade`
+- **Medium**: `reentrancy-benign`, `reentrancy-events`, `tx-origin`, `unchecked-transfer`
+- **Low**: `low-level-calls`, `naming-convention`, `solc-version`
+- **Informational**: All other detectors
+
+**Note**: This tool uses the Remix Slither API (`https://mcp.api.remix.live/slither/analyze`), so no local Slither installation is required. The server parses the Remix API text output and structures it into categorized findings.
 
 ## Network Details
 
@@ -202,8 +246,56 @@ Runs Slither security analysis on Solidity contracts to detect vulnerabilities, 
 - The `.env` file is gitignored by default
 - Server verifies all payments on-chain before executing tools
 
+## Example Output
+
+### Slither Analysis Example
+
+```bash
+$ npm run slither
+
+🔌 Connecting to MCP server...
+✅ Connected!
+
+🔍 Running Slither security analysis...
+
+✅ Analysis completed successfully!
+   (Payment was settled on-chain and verified before analysis)
+
+📋 Summary:
+   Total Findings: 4
+   High Severity: 1
+   Medium Severity: 0
+   Low Severity: 3
+   Informational: 0
+   Optimization: 0
+
+🐛 Detailed Findings:
+
+  1. [High] reentrancy-eth
+     Confidence: Medium
+     Reentrancy in VulnerableBank.withdraw(uint256)...
+     External calls:
+     - (success,None) = msg.sender.call{value: _amount}()
+     ... (5 more lines)
+     Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-1
+
+  2. [Low] solc-version
+     Confidence: Medium
+     Version constraint ^0.8.0 contains known severe issues...
+
+  3. [Low] low-level-calls
+     Confidence: Medium
+     Low level call in VulnerableBank.withdraw(uint256)...
+
+  4. [Low] naming-convention
+     Confidence: Medium
+     Parameter VulnerableBank.withdraw(uint256)._amount is not in mixedCase...
+```
+
 ## Links
 
 - [x402 Protocol](https://github.com/ampersand-ai/x402)
 - [Ampersend SDK](https://github.com/ampersand-ai/ampersend-sdk)
 - [EIP-3009 Specification](https://eips.ethereum.org/EIPS/eip-3009)
+- [Slither Documentation](https://github.com/crytic/slither)
+- [Remix IDE](https://remix.ethereum.org)

@@ -180,12 +180,13 @@ mcp.addTool({
 
 mcp.addTool({
   name: "analyze_with_slither",
-  description: "Run Slither security analysis on Solidity contracts. Accepts contract sources and returns security findings including vulnerabilities, optimizations, and best practice violations.",
+  description: "Run Slither security analysis on Solidity contracts using Remix API. Accepts contract sources and returns security findings including vulnerabilities, optimizations, and best practice violations.",
   parameters: z.object({
     sources: z.record(z.string(), z.object({
       content: z.string()
     })).describe("Object with contract filenames as keys and their content"),
-    detectors: z.array(z.string()).optional().describe("Optional list of specific detectors to run (e.g., ['reentrancy-eth', 'tx-origin']). If not provided, all detectors will run."),
+    version: z.string().optional().describe("Solidity compiler version (e.g., '0.8.26+commit.8a97fa7a'). Defaults to 0.8.26"),
+    detectors: z.array(z.string()).optional().describe("Optional list of specific detectors to run (e.g., ['reentrancy-eth', 'tx-origin']). Filters results client-side."),
     excludeInformational: z.boolean().optional().describe("Exclude informational severity findings (default: false)"),
     excludeLow: z.boolean().optional().describe("Exclude low severity findings (default: false)")
   }),
@@ -248,118 +249,152 @@ mcp.addTool({
     },
   })(async (args: {
     sources: Record<string, { content: string }>,
+    version?: string,
     detectors?: string[],
     excludeInformational?: boolean,
     excludeLow?: boolean
   }, _context: any) => {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const { execSync } = await import('child_process');
-    const os = await import('os');
-
-    // Create a temporary directory for the analysis
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'slither-'));
-
     try {
-      // Write all source files to the temp directory
-      for (const [filename, file] of Object.entries(args.sources)) {
-        const filePath = path.join(tempDir, filename);
-        await fs.writeFile(filePath, file.content, 'utf-8');
+      // Use Remix Slither API endpoint
+      const SLITHER_API_URL = 'https://mcp.api.remix.live/slither/analyze';
+
+      // Get the first source file's content (Remix API expects a single contract)
+      // If multiple files are provided, we'll need to flatten or handle them
+      const fileEntries = Object.entries(args.sources);
+      if (fileEntries.length === 0) {
+        throw new Error("No source files provided");
+      }
+      const firstEntry = fileEntries[0]!;
+      const filename = firstEntry[0];
+      const fileContent = firstEntry[1];
+
+      // Prepare the request payload in Remix API format
+      const requestPayload = {
+        sources: {
+          [filename]: {
+            content: fileContent.content
+          }
+        },
+        version: args.version || "0.8.26+commit.8a97fa7a" // Use provided version or default
+      };
+
+      console.log(`🔍 Sending Slither analysis request to Remix API...`);
+      console.log(`   File: ${filename}`);
+
+      // Make the API request
+      const response = await fetch(SLITHER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Remix API returned ${response.status}: ${response.statusText}`);
       }
 
-      // Build slither command
-      let slitherCmd = `slither ${tempDir} --json -`;
+      const slitherResult = await response.json();
 
-      // Add detector filter if specified
-      if (args.detectors && args.detectors.length > 0) {
-        slitherCmd += ` --detect ${args.detectors.join(',')}`;
-      }
-
-      // Add severity filters
-      if (args.excludeInformational) {
-        slitherCmd += ' --exclude-informational';
-      }
-      if (args.excludeLow) {
-        slitherCmd += ' --exclude-low';
-      }
-
-      // Run Slither and capture output
-      let slitherOutput: string;
-      try {
-        slitherOutput = execSync(slitherCmd, {
-          encoding: 'utf-8',
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-          stdio: ['pipe', 'pipe', 'pipe'] // Capture stdout and stderr
-        });
-      } catch (error: any) {
-        // Slither exits with non-zero code when it finds issues
-        // The JSON output is still in stdout
-        slitherOutput = error.stdout || error.message;
-      }
-
-      // Parse Slither JSON output
+      // Parse and format the Remix API response
       let analysisResult;
-      try {
-        const jsonMatch = slitherOutput.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const slitherJson = JSON.parse(jsonMatch[0]);
 
-          // Format the results in a more readable way
-          const findings = slitherJson.results?.detectors || [];
-          const summary = {
-            totalFindings: findings.length,
-            high: findings.filter((f: any) => f.impact === 'High').length,
-            medium: findings.filter((f: any) => f.impact === 'Medium').length,
-            low: findings.filter((f: any) => f.impact === 'Low').length,
-            informational: findings.filter((f: any) => f.impact === 'Informational').length,
-            optimization: findings.filter((f: any) => f.impact === 'Optimization').length
-          };
+      if (slitherResult && slitherResult.success && slitherResult.analysis) {
+        // Parse the text-based analysis output from Remix API
+        const analysisText = slitherResult.analysis as string;
 
-          analysisResult = {
-            success: true,
-            summary,
-            findings: findings.map((f: any) => ({
-              check: f.check,
-              impact: f.impact,
-              confidence: f.confidence,
-              description: f.description,
-              elements: f.elements?.map((e: any) => ({
-                type: e.type,
-                name: e.name,
-                source: e.source_mapping?.filename_short
-              }))
-            })),
-            rawOutput: slitherJson
-          };
-        } else {
-          analysisResult = {
-            success: false,
-            error: "Failed to parse Slither JSON output",
-            rawOutput: slitherOutput
-          };
+        // Extract detector findings from the text output
+        const detectorMatches = analysisText.split('INFO:Detectors:\nDetector: ');
+        const findings: any[] = [];
+
+        // Skip the first element (before first detector)
+        for (let i = 1; i < detectorMatches.length; i++) {
+          const detectorBlock = detectorMatches[i];
+          if (!detectorBlock) continue;
+
+          const lines = detectorBlock.split('\n');
+          const detectorName = lines[0]?.trim() || 'unknown';
+
+          // Extract the description (everything before "Reference:")
+          const referenceIndex = detectorBlock.indexOf('Reference:');
+          const description = referenceIndex > 0
+            ? detectorBlock.substring(detectorName.length, referenceIndex).trim()
+            : detectorBlock.substring(detectorName.length).trim();
+
+          // Extract reference URL if present
+          const referenceMatch = detectorBlock.match(/Reference: (https?:\/\/[^\s]+)/);
+          const reference = referenceMatch ? referenceMatch[1] : '';
+
+          // Determine impact level based on detector name
+          let impact = 'Informational';
+          if (['reentrancy-eth', 'reentrancy-no-eth', 'suicidal', 'unprotected-upgrade'].includes(detectorName)) {
+            impact = 'High';
+          } else if (['reentrancy-benign', 'reentrancy-events', 'tx-origin', 'unchecked-transfer'].includes(detectorName)) {
+            impact = 'Medium';
+          } else if (['low-level-calls', 'naming-convention', 'solc-version'].includes(detectorName)) {
+            impact = 'Low';
+          }
+
+          findings.push({
+            check: detectorName,
+            impact,
+            confidence: 'Medium', // Default confidence
+            description,
+            reference
+          });
         }
-      } catch (parseError: any) {
+
+        // Apply client-side filters if requested
+        let filteredFindings = findings;
+        if (args.excludeInformational) {
+          filteredFindings = filteredFindings.filter((f: any) => f.impact !== 'Informational');
+        }
+        if (args.excludeLow) {
+          filteredFindings = filteredFindings.filter((f: any) => f.impact !== 'Low');
+        }
+        // Apply detector filter if specified
+        if (args.detectors && args.detectors.length > 0) {
+          filteredFindings = filteredFindings.filter((f: any) =>
+            args.detectors!.includes(f.check)
+          );
+        }
+
+        const summary = {
+          totalFindings: filteredFindings.length,
+          high: filteredFindings.filter((f: any) => f.impact === 'High').length,
+          medium: filteredFindings.filter((f: any) => f.impact === 'Medium').length,
+          low: filteredFindings.filter((f: any) => f.impact === 'Low').length,
+          informational: filteredFindings.filter((f: any) => f.impact === 'Informational').length,
+          optimization: filteredFindings.filter((f: any) => f.impact === 'Optimization').length
+        };
+
+        analysisResult = {
+          success: true,
+          summary,
+          findings: filteredFindings,
+          rawAnalysis: analysisText,
+          rawOutput: slitherResult
+        };
+
+        console.log(`✅ Slither analysis completed`);
+        console.log(`   Total findings: ${summary.totalFindings}`);
+        console.log(`   High: ${summary.high}, Medium: ${summary.medium}, Low: ${summary.low}`);
+      } else {
         analysisResult = {
           success: false,
-          error: `Failed to parse Slither output: ${parseError.message}`,
-          rawOutput: slitherOutput
+          error: "Invalid response format from Remix API",
+          rawOutput: slitherResult
         };
       }
 
       return JSON.stringify(analysisResult, null, 2);
     } catch (error: any) {
+      console.error(`❌ Slither analysis failed:`, error.message);
       const result = {
         success: false,
         error: error.message || "Slither analysis failed"
       };
       return JSON.stringify(result, null, 2);
-    } finally {
-      // Clean up temp directory
-      try {
-        await fs.rm(tempDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        console.error('Failed to clean up temp directory:', cleanupError);
-      }
     }
   }),
 });
