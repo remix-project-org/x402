@@ -9,7 +9,8 @@
     "start": "node dist/server/index.js",
     "dev": "ts-node src/server/index.ts",
     "compile": "node compile-solidity-client.js",
-    "slither": "node slither-client.js"
+    "slither": "node slither-client.js",
+    "deploy": "node deploy-solidity-client.js"
   },
   "author": "Aniket-Engg",
   "license": "ISC",
