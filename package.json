@@ -8,9 +8,10 @@
     "build": "tsc",
     "start": "node dist/server/index.js",
     "dev": "ts-node src/server/index.ts",
-    "compile": "node compile-solidity-client.js",
-    "slither": "node slither-client.js",
-    "deploy": "node deploy-solidity-client.js"
+    "example:compile": "node src/examples/compile.js",
+    "example:slither": "node src/examples/slither.js",
+    "example:deploy": "node src/examples/deploy.js",
+    "examples": "node src/examples/index.js"
   },
   "author": "Aniket-Engg",
   "license": "ISC",

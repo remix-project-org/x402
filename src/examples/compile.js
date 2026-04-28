@@ -1,4 +1,4 @@
-import { createMCPClient } from "./src/client/index.js";
+import { createMCPClient } from "../client/index.js";
 
 // Create Ampersend MCP client with automatic payment handling
 const { client, transport } = createMCPClient("http://localhost:8000/mcp");
