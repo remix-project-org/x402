@@ -11,8 +11,9 @@ This project demonstrates a complete x402 payment flow where:
 
 ## Features
 
-- **Paid Solidity Compilation**: Compile Solidity contracts using Remix compiler (0.5 USDC per compilation)
-- **Paid Slither Analysis**: Security analysis of Solidity contracts using Slither (0.75 USDC per analysis)
+- **Paid Solidity Compilation**: Compile Solidity contracts using Remix compiler (0.01 USDC)
+- **Paid Slither Analysis**: Security analysis of Solidity contracts using Slither (0.02 USDC)
+- **Delegated Deployment Service**: Deploy contracts without sharing private keys (0.05 USDC)
 - **x402 Payment Protocol**: Fully compliant implementation with on-chain settlement verification
 - **USDC Payments**: ERC-20 token payments on Base Sepolia testnet
 - **Custom Wallet**: EIP-712 signature implementation for USDC compatibility
@@ -21,14 +22,18 @@ This project demonstrates a complete x402 payment flow where:
 ## Architecture
 
 ### Client Side
-- `src/client/index.js` - MCP client setup and configuration
-- `src/client/treasurer.js` - Handles payment authorization and on-chain settlement
-- `src/client/usdc-wallet.js` - Custom wallet with USDC-compatible EIP-712 signatures
+- `src/client/` - Client SDK for MCP communication and X402 payments
+  - `index.js` - MCP client factory
+  - `treasurer.js` - Payment authorization and settlement
+  - `usdc-wallet.js` - USDC-compatible wallet implementation
+  - `wallet.js`, `transport.js`, `naive-treasurer.js` - Supporting utilities
+- `src/examples/` - Example implementations demonstrating tool usage
 
 ### Server Side
 - `src/server/index.ts` - MCP server with payment-gated tools
 - Verifies payment settlement on-chain before executing tools
 - Integrates with Remix API for Slither analysis
+- Delegated Deployment Service for secure contract deployment
 
 ## Prerequisites
 
@@ -40,7 +45,7 @@ This project demonstrates a complete x402 payment flow where:
 
 ```bash
 # Install dependencies
-npm install
+yarn install
 
 # or
 yarn install
@@ -56,6 +61,10 @@ PRIVATE_KEY=0x...
 
 # Address where payments should be sent (server owner's address)
 PAY_TO_ADDRESS=0x...
+
+# Server deployer wallet for Delegated Deployment Service
+# This wallet needs to be funded with native tokens for gas
+SERVER_DEPLOYER_PRIVATE_KEY=0x...
 ```
 
 2. Get testnet USDC
@@ -64,7 +73,7 @@ PAY_TO_ADDRESS=0x...
 
 ```bash
 # Build TypeScript files
-npm run build
+yarn run build
 
 # or
 yarn build
@@ -82,38 +91,46 @@ The server will start on `http://localhost:8000/mcp`
 
 ### 2. Run the Clients
 
-#### Solidity Compilation Client
+All client examples are organized in the `clients/` directory. You can:
 
+**View all available examples:**
 ```bash
-npm run compile
+yarn run examples
 ```
 
-The client will:
-1. Connect to the MCP server
-2. Request the `compile_solidity` tool
-3. Receive a 402 Payment Required response
-4. Create a USDC payment authorization
-5. Settle the payment on-chain (client pays gas)
-6. Re-request with payment proof
-7. Server verifies settlement on-chain
-8. Compilation executes and returns results
+**Run individual examples:**
 
-#### Slither Analysis Client
-
+#### Solidity Compilation Example
 ```bash
-npm run slither
+yarn run example:compile
 ```
+- Compiles Solidity contracts
+- Cost: 0.01 USDC
 
-The client will:
+#### Slither Security Analysis Example
+```bash
+yarn run example:slither
+```
+- Runs security analysis on contracts
+- Cost: 0.02 USDC
+
+#### Deploy Contract Example (Delegated Deployment Service)
+```bash
+yarn run example:deploy
+```
+- Compiles and deploys contracts using server's wallet
+- Cost: 0.05 USDC
+- **No private key required from client!**
+
+### How Clients Work
+
+Each client automatically handles the x402 payment flow:
 1. Connect to the MCP server
-2. Request the `analyze_with_slither` tool with a vulnerable contract
-3. Handle payment flow (same as compilation flow)
-4. Server forwards request to Remix Slither API
-5. Receive detailed security findings organized by severity:
-   - High severity issues (reentrancy, etc.)
-   - Medium severity issues (tx.origin, etc.)
-   - Low severity issues (naming conventions, etc.)
-   - Informational findings
+2. Request a tool execution
+3. X402 treasurer settles payment on-chain (USDC transfer)
+4. Server verifies payment settlement
+5. Tool executes and returns results
+6. All payment handling is automatic via Ampersend SDK
 
 ## Payment Flow
 
@@ -141,7 +158,7 @@ Client                          Server
 
 Compiles Solidity contracts using the Remix compiler.
 
-**Payment Required**: 0.5 USDC (500000 with 6 decimals)
+**Payment Required**: 0.01 USDC (10000 with 6 decimals)
 
 **Parameters**:
 - `sources`: Object with contract filenames as keys and their content
@@ -166,7 +183,7 @@ Compiles Solidity contracts using the Remix compiler.
 
 Runs Slither security analysis on Solidity contracts using the Remix API endpoint to detect vulnerabilities, optimization opportunities, and best practice violations.
 
-**Payment Required**: 0.75 USDC (750000 with 6 decimals)
+**Payment Required**: 0.02 USDC (20000 with 6 decimals)
 
 **API Endpoint**: `https://mcp.api.remix.live/slither/analyze`
 
@@ -232,6 +249,65 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 
 **Note**: This tool uses the Remix Slither API (`https://mcp.api.remix.live/slither/analyze`), so no local Slither installation is required. The server parses the Remix API text output and structures it into categorized findings.
 
+### compile_for_deployment
+
+Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS).
+
+**Payment Required**: 0.05 USDC (50000 with 6 decimals)
+
+**Security**: Client never shares private keys. Server uses its own funded wallet for deployment.
+
+**Parameters**:
+- `sources`: Object with contract filenames as keys and their content
+- `contractName`: Name of the contract to deploy (e.g., "SimpleStorage")
+- `contractFile`: Filename containing the contract (e.g., "SimpleStorage.sol")
+- `constructorArgs` (optional): Array of constructor arguments
+- `settings` (optional): Compiler settings (optimizer, evmVersion)
+- `network`: Target network ("base-sepolia", "base", "avalanche-fuji", etc.)
+
+**Returns**:
+```javascript
+{
+  "success": true,
+  "compilation": {
+    "warnings": []
+  },
+  "deployment": {
+    "contractAddress": "0x...",
+    "transactionHash": "0x...",
+    "blockNumber": "12345",
+    "gasUsed": "500000",
+    "network": "base-sepolia",
+    "deployedBy": "server-delegated-deployer",
+    "deployerAddress": "0x..."
+  },
+  "abi": [...]
+}
+```
+
+**Example**:
+```javascript
+{
+  sources: {
+    "SimpleStorage.sol": {
+      content: "contract SimpleStorage { ... }"
+    }
+  },
+  contractName: "SimpleStorage",
+  contractFile: "SimpleStorage.sol",
+  constructorArgs: [42],
+  network: "base-sepolia"
+}
+```
+
+**How it works**:
+1. Client pays 0.05 USDC via X402
+2. Server verifies payment on-chain
+3. Server compiles the contract
+4. Server deploys using its own wallet (SERVER_DEPLOYER_PRIVATE_KEY)
+5. Server pays gas fees (covered by your payment)
+6. Client receives contract address and deployment details
+
 ## Network Details
 
 - **Network**: Base Sepolia
@@ -251,7 +327,7 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 ### Slither Analysis Example
 
 ```bash
-$ npm run slither
+$ yarn run slither
 
 🔌 Connecting to MCP server...
 ✅ Connected!
