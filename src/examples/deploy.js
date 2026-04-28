@@ -56,7 +56,7 @@ try {
   // Call tool - treasurer will automatically settle payment on-chain
   // Server will compile and deploy using its delegated deployer wallet
   const result = await client.callTool({
-    name: "compile_for_deployment",
+    name: "compile_and_deploy",
     arguments: {
       sources: soliditySources,
       contractName: "SimpleStorage",

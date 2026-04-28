@@ -30,10 +30,19 @@ This project demonstrates a complete x402 payment flow where:
 - `src/examples/` - Example implementations demonstrating tool usage
 
 ### Server Side
-- `src/server/index.ts` - MCP server with payment-gated tools
-- Verifies payment settlement on-chain before executing tools
+Modular MCP server implementation with payment-gated tools:
+- `src/server/` - Organized server architecture
+  - `index.ts` - Main entry point (36 lines)
+  - `tools/` - Individual MCP tools
+    - `compile-solidity.ts` - Solidity compilation (83 lines)
+    - `analyze-slither.ts` - Security analysis via Slither (177 lines)
+    - `compile-deploy.ts` - Delegated deployment service (207 lines)
+  - `utils/` - Shared utilities
+    - `payment.ts` - Payment verification utilities (70 lines)
+- Verifies X402 payments on-chain before executing tools
 - Integrates with Remix API for Slither analysis
-- Delegated Deployment Service for secure contract deployment
+- Provides Delegated Deployment Service for secure contract deployment
+- See `REFACTORING_SUMMARY.md` for detailed refactoring documentation
 
 ## Prerequisites
 
@@ -249,7 +258,7 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 
 **Note**: This tool uses the Remix Slither API (`https://mcp.api.remix.live/slither/analyze`), so no local Slither installation is required. The server parses the Remix API text output and structures it into categorized findings.
 
-### compile_for_deployment
+### compile_and_deploy
 
 Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS).
 

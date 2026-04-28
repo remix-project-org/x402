@@ -32,7 +32,7 @@ yarn run example:deploy    # Deploy contract (0.05 USDC)
 |------|-------|-------------|
 | `compile_solidity` | 0.01 USDC | Compile Solidity contracts |
 | `analyze_with_slither` | 0.02 USDC | Security analysis via Slither |
-| `compile_for_deployment` | 0.05 USDC | Compile & deploy (DDS) |
+| `compile_and_deploy` | 0.05 USDC | Compile & deploy (DDS) |
 
 ## Configuration
 

@@ -3,4 +3,4 @@
  */
 export { registerCompileSolidityTool } from "./compile-solidity.js";
 export { registerAnalyzeWithSlitherTool } from "./analyze-slither.js";
-export { registerCompileForDeploymentTool } from "./compile-deploy.js";
+export { registerCompileAndDeploymentTool } from "./compile-deploy.js";

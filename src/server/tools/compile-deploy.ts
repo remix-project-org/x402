@@ -3,9 +3,9 @@ import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
 
-export function registerCompileForDeploymentTool(mcp: FastMCP) {
+export function registerCompileAndDeploymentTool(mcp: FastMCP) {
   mcp.addTool({
-  name: "compile_for_deployment",
+  name: "compile_and_deploy",
   description: "Compile and deploy Solidity contracts using the server's Delegated Deployment Service. Server compiles and deploys the contract using its own funded wallet. Client pays for gas costs + service fee via X402 payment.",
   parameters: z.object({
     sources: z.record(z.string(), z.object({
@@ -26,7 +26,7 @@ export function registerCompileForDeploymentTool(mcp: FastMCP) {
   execute: withX402Payment({
     onExecute: async (_context: { args: unknown }) => {
       return createPaymentRequirements(
-        "compile_for_deployment",
+        "compile_and_deploy",
         "50000", // 0.05 USDC
         "Payment for compilation and delegated deployment service"
       );
