@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import {
   registerCompileSolidityTool,
   registerAnalyzeWithSlitherTool,
-  registerCompileForDeploymentTool
+  registerCompileAndDeploymentTool
 } from "./tools/index.js";
 
 // Load environment variables
@@ -18,7 +18,7 @@ const mcp = new FastMCP({
 // Register all tools
 registerCompileSolidityTool(mcp);
 registerAnalyzeWithSlitherTool(mcp);
-registerCompileForDeploymentTool(mcp);
+registerCompileAndDeploymentTool(mcp);
 
 // Start the MCP server with HTTP transport
 mcp.start({
@@ -33,4 +33,4 @@ console.log("🚀 MCP Server running on http://localhost:8000/mcp");
 console.log("📦 Available tools:");
 console.log("   - compile_solidity (0.01 USDC)");
 console.log("   - analyze_with_slither (0.02 USDC)");
-console.log("   - compile_for_deployment (0.05 USDC)");
+console.log("   - compile_and_deploy (0.05 USDC)");
