@@ -7,11 +7,11 @@ console.log("🔌 Connecting to MCP server...");
 await client.connect(transport);
 console.log("✅ Connected!");
 
-// Example: Compile and Deploy Only
-// The server will compile and deploy the contract using its own funded wallet
+// Example: Compile, Deploy and Call Method
+// The server will compile, deploy, and call a method on the contract
 // Client pays 0.05 USDC to cover gas costs + service fee
-console.log("\n🚀 Example: Compile and Deploy Only");
-console.log("   (Server will deploy using its own funded wallet)");
+console.log("\n🚀 Example: Compile, Deploy and Call Method");
+console.log("   (Server will deploy and call method using its own funded wallet)");
 
 const soliditySources = {
   "SimpleStorage.sol": {
@@ -50,11 +50,11 @@ const compilerSettings = {
 };
 
 try {
-  console.log("\n💰 Payment: 0.05 USDC will be charged for compilation + deployment service");
+  console.log("\n💰 Payment: 0.05 USDC will be charged for compilation + deployment + method call service");
   console.log("🔐 Security: Your private key stays with you - server uses its own deployer wallet");
 
   // Call tool - treasurer will automatically settle payment on-chain
-  // Server will compile and deploy using its delegated deployer wallet
+  // Server will compile, deploy, and call the method using its delegated deployer wallet
   const result = await client.callTool({
     name: "compile_and_deploy",
     arguments: {
@@ -63,7 +63,11 @@ try {
       contractFile: "SimpleStorage.sol",
       constructorArgs: [42], // Initial value for the constructor
       settings: compilerSettings,
-      network: "base-sepolia" // Deploy to Base Sepolia testnet
+      network: "base-sepolia", // Deploy to Base Sepolia testnet
+      postDeploymentCall: {
+        methodName: "set",
+        methodArgs: [100] // Set value to 100 after deployment
+      }
     }
   });
 
@@ -82,8 +86,8 @@ try {
   console.log(JSON.stringify(deploymentResult, null, 2));
 
   if (deploymentResult.success) {
-    console.log("\n✅ Deployment successful!");
-    console.log("   (Payment was settled and server deployed the contract)");
+    console.log("\n✅ All operations successful!");
+    console.log("   (Payment was settled, contract deployed, and method called)");
 
     console.log("\n📄 Compilation Details:");
     if (deploymentResult.compilation && deploymentResult.compilation.warnings.length > 0) {
@@ -105,6 +109,16 @@ try {
     console.log(`  Deployed By: ${deploymentResult.deployment.deployedBy}`);
     console.log(`  Deployer Address: ${deploymentResult.deployment.deployerAddress}`);
 
+    if (deploymentResult.postDeploymentCall) {
+      console.log("\n📄 Post-Deployment Method Call Details:");
+      console.log(`  Success: ${deploymentResult.postDeploymentCall.success}`);
+      console.log(`  Method: ${deploymentResult.postDeploymentCall.methodName}`);
+      console.log(`  Arguments: ${JSON.stringify(deploymentResult.postDeploymentCall.methodArgs)}`);
+      console.log(`  Transaction Hash: ${deploymentResult.postDeploymentCall.transactionHash}`);
+      console.log(`  Block Number: ${deploymentResult.postDeploymentCall.blockNumber}`);
+      console.log(`  Gas Used: ${deploymentResult.postDeploymentCall.gasUsed}`);
+    }
+
     console.log("\n🔗 View on Block Explorer:");
     const explorerUrl = `https://sepolia.basescan.org/address/${deploymentResult.deployment.contractAddress}`;
     console.log(`  ${explorerUrl}`);
@@ -114,13 +128,37 @@ try {
     console.log("  2. Server verified payment on-chain");
     console.log("  3. Server compiled your contract");
     console.log("  4. Server deployed using its funded wallet (gas paid by server)");
-    console.log("  5. Your USDC payment covers server's gas costs + service fee");
-    console.log("  6. Your private key never left your client!");
+    console.log("  5. Server called the specified method on the deployed contract");
+    console.log("  6. Your USDC payment covers server's gas costs + service fee");
+    console.log("  7. Your private key never left your client!");
   } else {
     console.log("\n❌ Operation failed!");
+
     if (deploymentResult.message) {
       console.log(`\n⚠️  ${deploymentResult.message}`);
     }
+
+    // Show deployment details even if method call failed
+    if (deploymentResult.deployment && deploymentResult.deployment.success) {
+      console.log("\n✅ Deployment was successful:");
+      console.log(`  Contract Address: ${deploymentResult.deployment.contractAddress}`);
+      console.log(`  Transaction Hash: ${deploymentResult.deployment.transactionHash}`);
+      console.log(`  Block Number: ${deploymentResult.deployment.blockNumber}`);
+      console.log(`  Gas Used: ${deploymentResult.deployment.gasUsed}`);
+
+      console.log("\n🔗 View on Block Explorer:");
+      const explorerUrl = `https://sepolia.basescan.org/address/${deploymentResult.deployment.contractAddress}`;
+      console.log(`  ${explorerUrl}`);
+    }
+
+    // Show method call error details
+    if (deploymentResult.postDeploymentCall && !deploymentResult.postDeploymentCall.success) {
+      console.log("\n❌ Method call failed:");
+      console.log(`  Method: ${deploymentResult.postDeploymentCall.methodName}`);
+      console.log(`  Arguments: ${JSON.stringify(deploymentResult.postDeploymentCall.methodArgs)}`);
+      console.log(`  Error: ${deploymentResult.postDeploymentCall.error}`);
+    }
+
     if (deploymentResult.error) {
       console.log(`\n🐛 Error: ${deploymentResult.error}`);
     }
@@ -139,5 +177,3 @@ try {
 
 await client.close();
 console.log("\n👋 Disconnected");
-
-// https://sepolia.basescan.org/address/0x92f2109c434260439244cb15da0abea34b0023fc
