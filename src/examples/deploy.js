@@ -50,7 +50,8 @@ const compilerSettings = {
 };
 
 try {
-  console.log("\n💰 Payment: 0.05 USDC will be charged for compilation + deployment service");
+  console.log("\n💰 Payment: Dynamic pricing (gas cost + 30% service fee + 0.05 USDC base fee)");
+  console.log("   Server will estimate deployment gas and calculate total cost");
   console.log("🔐 Security: Your private key stays with you - server uses its own deployer wallet");
 
   // Call tool - treasurer will automatically settle payment on-chain

@@ -33,4 +33,4 @@ console.log("🚀 MCP Server running on http://localhost:8000/mcp");
 console.log("📦 Available tools:");
 console.log("   - compile_solidity (0.01 USDC)");
 console.log("   - analyze_with_slither (0.02 USDC)");
-console.log("   - compile_and_deploy (0.05 USDC)");
+console.log("   - compile_and_deploy (dynamic pricing based on gas estimation, min 0.05 USDC)");

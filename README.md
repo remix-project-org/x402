@@ -13,7 +13,10 @@ This project demonstrates a complete x402 payment flow where:
 
 - **Paid Solidity Compilation**: Compile Solidity contracts using Remix compiler (0.01 USDC)
 - **Paid Slither Analysis**: Security analysis of Solidity contracts using Slither (0.02 USDC)
-- **Delegated Deployment Service**: Deploy contracts without sharing private keys (0.05 USDC)
+- **Delegated Deployment Service**: Deploy contracts without sharing private keys
+  - Dynamic gas-based pricing + 0.05 USDC base fee
+  - Gas estimation before payment (deployment + optional method call)
+  - Pricing: Gas cost + 30% service fee + 0.05 USDC base fee
   - Optional post-deployment method calls
   - Automatic transaction handling and verification
 - **x402 Payment Protocol**: Fully compliant implementation with on-chain settlement verification
@@ -38,7 +41,7 @@ Modular MCP server implementation with payment-gated tools:
   - `tools/` - Individual MCP tools
     - `compile-solidity.ts` - Solidity compilation (83 lines)
     - `analyze-slither.ts` - Security analysis via Slither (177 lines)
-    - `compile-deploy.ts` - Delegated deployment service with optional method calls (260+ lines)
+    - `compile-deploy.ts` - Delegated deployment with dynamic gas-based pricing (320+ lines)
   - `utils/` - Shared utilities
     - `payment.ts` - Payment verification utilities (70 lines)
 - Verifies X402 payments on-chain before executing tools
@@ -130,7 +133,8 @@ yarn run example:slither
 yarn run example:deploy
 ```
 - Compiles and deploys contracts using server's wallet
-- Cost: 0.05 USDC
+- Cost: Dynamic based on gas estimation (minimum 0.05 USDC)
+- **Server estimates deployment gas before requiring payment**
 - **No private key required from client!**
 
 #### Deploy Contract and Call Method Example
@@ -138,8 +142,9 @@ yarn run example:deploy
 yarn run example:deploy-and-call
 ```
 - Compiles and deploys contracts, then calls a method
-- Demonstrates post-deployment method execution
-- Cost: 0.05 USDC (covers deployment + method call gas)
+- Demonstrates post-deployment method execution with dynamic pricing
+- Cost: Dynamic (deployment + method call gas, minimum 0.05 USDC)
+- **Server estimates total gas before requiring payment**
 - **Shows both deployment and method call transaction details**
 
 ### How Clients Work
@@ -271,9 +276,24 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 
 ### compile_and_deploy
 
-Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS). Optionally call a contract method immediately after deployment.
+Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS). Optionally call a contract method immediately after deployment. Uses dynamic gas-based pricing for fair and transparent costs.
 
-**Payment Required**: 0.05 USDC (50000 with 6 decimals)
+**Payment Required**: Dynamic based on gas estimation + base service fee
+- Server compiles contract and estimates deployment gas
+- If post-deployment call specified:
+  - Predicts contract address using account nonce
+  - Estimates method call gas on predicted address
+  - Adds to total gas estimate
+- **Pricing Formula**:
+  ```
+  Gas Cost = (Total Gas × Gas Price × 1.2 buffer) × ETH/USD
+  Service Fee = Gas Cost × 30%
+  Base Fee = 0.05 USDC
+  Total = Gas Cost + Service Fee + Base Fee
+  ```
+- Base service fee of 0.05 USDC is always added
+- Falls back to 0.05 USDC if estimation fails
+- If method call estimation fails, uses 150k gas conservative estimate
 
 **Security**: Client never shares private keys. Server uses its own funded wallet for deployment.
 
@@ -400,10 +420,19 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 7. Client receives contract address, deployment details, and method call results
 
 **Flow and Error Handling**:
+- If gas estimation fails → falls back to default 0.05 USDC
 - If compilation fails → deployment does not proceed
 - If deployment fails → method call does not proceed
 - If method call fails → deployment details are still returned with clear error message
 - All transaction details (hashes, gas used, block numbers) are included in the response
+
+**Dynamic Pricing Benefits**:
+- Pay only for actual gas used (fair pricing based on real costs)
+- Automatic adjustment based on network gas prices
+- Transparent gas estimation shown before payment
+- 20% buffer ensures transaction won't fail due to gas price fluctuations
+- 30% service fee on gas costs covers operational overhead
+- 0.05 USDC base fee ensures service viability for all deployments
 
 ## Network Details
 
