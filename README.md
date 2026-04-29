@@ -14,6 +14,8 @@ This project demonstrates a complete x402 payment flow where:
 - **Paid Solidity Compilation**: Compile Solidity contracts using Remix compiler (0.01 USDC)
 - **Paid Slither Analysis**: Security analysis of Solidity contracts using Slither (0.02 USDC)
 - **Delegated Deployment Service**: Deploy contracts without sharing private keys (0.05 USDC)
+  - Optional post-deployment method calls
+  - Automatic transaction handling and verification
 - **x402 Payment Protocol**: Fully compliant implementation with on-chain settlement verification
 - **USDC Payments**: ERC-20 token payments on Base Sepolia testnet
 - **Custom Wallet**: EIP-712 signature implementation for USDC compatibility
@@ -36,7 +38,7 @@ Modular MCP server implementation with payment-gated tools:
   - `tools/` - Individual MCP tools
     - `compile-solidity.ts` - Solidity compilation (83 lines)
     - `analyze-slither.ts` - Security analysis via Slither (177 lines)
-    - `compile-deploy.ts` - Delegated deployment service (207 lines)
+    - `compile-deploy.ts` - Delegated deployment service with optional method calls (260+ lines)
   - `utils/` - Shared utilities
     - `payment.ts` - Payment verification utilities (70 lines)
 - Verifies X402 payments on-chain before executing tools
@@ -130,6 +132,15 @@ yarn run example:deploy
 - Compiles and deploys contracts using server's wallet
 - Cost: 0.05 USDC
 - **No private key required from client!**
+
+#### Deploy Contract and Call Method Example
+```bash
+yarn run example:deploy-and-call
+```
+- Compiles and deploys contracts, then calls a method
+- Demonstrates post-deployment method execution
+- Cost: 0.05 USDC (covers deployment + method call gas)
+- **Shows both deployment and method call transaction details**
 
 ### How Clients Work
 
@@ -260,7 +271,7 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 
 ### compile_and_deploy
 
-Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS).
+Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS). Optionally call a contract method immediately after deployment.
 
 **Payment Required**: 0.05 USDC (50000 with 6 decimals)
 
@@ -273,8 +284,11 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 - `constructorArgs` (optional): Array of constructor arguments
 - `settings` (optional): Compiler settings (optimizer, evmVersion)
 - `network`: Target network ("base-sepolia", "base", "avalanche-fuji", etc.)
+- `postDeploymentCall` (optional): Method to call after deployment
+  - `methodName`: Name of the method to call
+  - `methodArgs`: Array of arguments for the method
 
-**Returns**:
+**Returns (without post-deployment call)**:
 ```javascript
 {
   "success": true,
@@ -282,6 +296,7 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
     "warnings": []
   },
   "deployment": {
+    "success": true,
     "contractAddress": "0x...",
     "transactionHash": "0x...",
     "blockNumber": "12345",
@@ -294,7 +309,54 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 }
 ```
 
-**Example**:
+**Returns (with successful post-deployment call)**:
+```javascript
+{
+  "success": true,
+  "compilation": { "warnings": [] },
+  "deployment": {
+    "success": true,
+    "contractAddress": "0x...",
+    "transactionHash": "0x...",
+    ...
+  },
+  "postDeploymentCall": {
+    "success": true,
+    "methodName": "initialize",
+    "methodArgs": [100],
+    "transactionHash": "0x...",
+    "blockNumber": "12346",
+    "gasUsed": "50000",
+    "status": "success"
+  },
+  "abi": [...]
+}
+```
+
+**Returns (deployment successful, method call failed)**:
+```javascript
+{
+  "success": false,
+  "message": "Contract deployed successfully at 0x..., but post-deployment method call failed",
+  "compilation": { "warnings": [] },
+  "deployment": {
+    "success": true,
+    "contractAddress": "0x...",
+    "transactionHash": "0x...",
+    ...
+  },
+  "postDeploymentCall": {
+    "success": false,
+    "methodName": "initialize",
+    "methodArgs": [100],
+    "error": "execution reverted: ...",
+    "details": "..."
+  },
+  "abi": [...]
+}
+```
+
+**Example (deploy only)**:
 ```javascript
 {
   sources: {
@@ -309,13 +371,39 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 }
 ```
 
+**Example (deploy and call method)**:
+```javascript
+{
+  sources: {
+    "SimpleStorage.sol": {
+      content: "contract SimpleStorage { ... }"
+    }
+  },
+  contractName: "SimpleStorage",
+  contractFile: "SimpleStorage.sol",
+  constructorArgs: [42],
+  network: "base-sepolia",
+  postDeploymentCall: {
+    methodName: "set",
+    methodArgs: [100]
+  }
+}
+```
+
 **How it works**:
 1. Client pays 0.05 USDC via X402
 2. Server verifies payment on-chain
 3. Server compiles the contract
 4. Server deploys using its own wallet (SERVER_DEPLOYER_PRIVATE_KEY)
-5. Server pays gas fees (covered by your payment)
-6. Client receives contract address and deployment details
+5. (Optional) Server calls the specified method on the deployed contract
+6. Server pays all gas fees (covered by your payment)
+7. Client receives contract address, deployment details, and method call results
+
+**Flow and Error Handling**:
+- If compilation fails → deployment does not proceed
+- If deployment fails → method call does not proceed
+- If method call fails → deployment details are still returned with clear error message
+- All transaction details (hashes, gas used, block numbers) are included in the response
 
 ## Network Details
 

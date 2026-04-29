@@ -6,7 +6,7 @@ import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
 export function registerCompileAndDeploymentTool(mcp: FastMCP) {
   mcp.addTool({
   name: "compile_and_deploy",
-  description: "Compile and deploy Solidity contracts using the server's Delegated Deployment Service. Server compiles and deploys the contract using its own funded wallet. Client pays for gas costs + service fee via X402 payment.",
+  description: "Compile and deploy Solidity contracts using the server's Delegated Deployment Service. Server compiles and deploys the contract using its own funded wallet. Optionally call a contract method immediately after deployment. Client pays for gas costs + service fee via X402 payment.",
   parameters: z.object({
     sources: z.record(z.string(), z.object({
       content: z.string()
@@ -21,7 +21,11 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       }).optional(),
       evmVersion: z.string().optional()
     }).optional().describe("Optional compiler settings"),
-    network: z.enum(["base-sepolia", "base", "avalanche-fuji", "avalanche", "polygon", "polygon-amoy"]).describe("Network to deploy to")
+    network: z.enum(["base-sepolia", "base", "avalanche-fuji", "avalanche", "polygon", "polygon-amoy"]).describe("Network to deploy to"),
+    postDeploymentCall: z.object({
+      methodName: z.string().describe("Name of the method to call after deployment"),
+      methodArgs: z.array(z.any()).optional().describe("Arguments to pass to the method")
+    }).optional().describe("Optional method to call immediately after deployment")
   }),
   execute: withX402Payment({
     onExecute: async (_context: { args: unknown }) => {
@@ -38,7 +42,11 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
     contractFile: string,
     constructorArgs?: any[],
     settings?: any,
-    network: string
+    network: string,
+    postDeploymentCall?: {
+      methodName: string,
+      methodArgs?: any[]
+    }
   }, _context: any) => {
     try {
       console.log(`🔨 Starting compilation and deployment...`);
@@ -176,12 +184,14 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       console.log(`   Address: ${receipt.contractAddress}`);
       console.log(`   Block: ${receipt.blockNumber}`);
 
-      return JSON.stringify({
+      // Prepare base result with deployment info
+      const result: any = {
         success: true,
         compilation: {
           warnings: compilationResult.errors || []
         },
         deployment: {
+          success: true,
           contractAddress: receipt.contractAddress,
           transactionHash: hash,
           blockNumber: receipt.blockNumber.toString(),
@@ -192,7 +202,58 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
           deployerAddress: deployerAccount.address
         },
         abi: abi
-      }, null, 2);
+      };
+
+      // Step 4: Call post-deployment method if specified
+      if (args.postDeploymentCall && receipt.contractAddress) {
+        console.log(`🔧 Calling post-deployment method: ${args.postDeploymentCall.methodName}`);
+
+        try {
+          const callHash = await walletClient.writeContract({
+            address: receipt.contractAddress,
+            abi,
+            functionName: args.postDeploymentCall.methodName,
+            args: args.postDeploymentCall.methodArgs || [],
+            account: deployerAccount,
+            chain,
+          });
+
+          console.log(`📡 Method call transaction sent: ${callHash}`);
+          console.log(`⏳ Waiting for transaction confirmation...`);
+
+          const callReceipt = await walletClient.waitForTransactionReceipt({ hash: callHash });
+
+          console.log(`✅ Method call successful!`);
+          console.log(`   Transaction: ${callHash}`);
+          console.log(`   Block: ${callReceipt.blockNumber}`);
+
+          result.postDeploymentCall = {
+            success: true,
+            methodName: args.postDeploymentCall.methodName,
+            methodArgs: args.postDeploymentCall.methodArgs || [],
+            transactionHash: callHash,
+            blockNumber: callReceipt.blockNumber.toString(),
+            gasUsed: callReceipt.gasUsed.toString(),
+            status: callReceipt.status
+          };
+        } catch (callError: any) {
+          console.error(`❌ Post-deployment method call failed:`, callError.message);
+          console.error(`⚠️  Note: Contract was successfully deployed at ${receipt.contractAddress}`);
+
+          // Mark overall operation as failed, but preserve deployment info
+          result.success = false;
+          result.postDeploymentCall = {
+            success: false,
+            methodName: args.postDeploymentCall.methodName,
+            methodArgs: args.postDeploymentCall.methodArgs || [],
+            error: callError.message || "Method call failed",
+            details: callError.stack
+          };
+          result.message = `Contract deployed successfully at ${receipt.contractAddress}, but post-deployment method call failed`;
+        }
+      }
+
+      return JSON.stringify(result, null, 2);
 
     } catch (error: any) {
       console.error(`❌ Compilation and deployment failed:`, error.message);

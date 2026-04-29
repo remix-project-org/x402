@@ -11,6 +11,7 @@
     "example:compile": "node src/examples/compile.js",
     "example:slither": "node src/examples/slither.js",
     "example:deploy": "node src/examples/deploy.js",
+    "example:deploy-and-call": "node src/examples/deploy-and-call.js",
     "examples": "node src/examples/index.js"
   },
   "author": "Aniket-Engg",
