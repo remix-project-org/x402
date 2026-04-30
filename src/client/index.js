@@ -1,7 +1,7 @@
 import { Client } from "@ampersend_ai/ampersend-sdk/mcp/client";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Treasurer } from "./treasurer.js";
-import { USDCWallet } from "./usdc-wallet.js";
+import { Wallet } from "./wallet.js";
 import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
 
@@ -23,8 +23,8 @@ export function createMCPClient(serverUrl, clientInfo = { name: "MyMCPClient", v
   // Create viem account from private key
   const account = privateKeyToAccount(privateKey);
 
-  // Create custom USDC wallet with proper EIP-712 signatures
-  const wallet = new USDCWallet(account);
+  // Create wallet using Ampersand SDK's AccountWallet
+  const wallet = new Wallet(account);
 
   // Create treasurer
   const treasurer = new Treasurer(wallet);

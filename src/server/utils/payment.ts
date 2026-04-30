@@ -19,6 +19,10 @@ export function createPaymentRequirements(
     payTo: process.env.PAY_TO_ADDRESS as string,
     maxTimeoutSeconds: 300,
     asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
+    extra: {
+      name: "USDC",
+      version: "2",
+    },
   };
 }
 
