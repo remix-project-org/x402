@@ -21,7 +21,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       }).optional(),
       evmVersion: z.string().optional()
     }).optional().describe("Optional compiler settings"),
-    network: z.enum(["base-sepolia", "base", "avalanche-fuji", "avalanche", "polygon", "polygon-amoy"]).describe("Network to deploy to"),
+    network: z.enum(["base-sepolia", "base", "avalanche-fuji", "avalanche", "polygon", "polygon-amoy", "sepolia"]).describe("Network to deploy to"),
     postDeploymentCall: z.object({
       methodName: z.string().describe("Name of the method to call after deployment"),
       methodArgs: z.array(z.any()).optional().describe("Arguments to pass to the method")
@@ -96,6 +96,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
           "avalanche": viemChains.avalanche,
           "polygon": viemChains.polygon,
           "polygon-amoy": viemChains.polygonAmoy,
+          "sepolia": viemChains.sepolia,
         };
 
         const chain = chainMap[args.network];
@@ -322,6 +323,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         "avalanche": viemChains.avalanche,
         "polygon": viemChains.polygon,
         "polygon-amoy": viemChains.polygonAmoy,
+        "sepolia": viemChains.sepolia,
       };
 
       const chain = chainMap[args.network];
