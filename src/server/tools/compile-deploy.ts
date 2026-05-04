@@ -3,6 +3,23 @@ import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
 
+// Helper function to dynamically get chain from viem
+async function getChainFromViem(networkName: string): Promise<any> {
+  const viemChains = await import("viem/chains");
+
+  // Convert kebab-case to camelCase (e.g., "base-sepolia" -> "baseSepolia")
+  const camelCaseName = networkName.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
+  // Try to find the chain in viem
+  const chain = (viemChains as any)[camelCaseName];
+
+  if (!chain) {
+    throw new Error(`Network "${networkName}" not found in viem/chains. Please check the network name.`);
+  }
+
+  return chain;
+}
+
 export function registerCompileAndDeploymentTool(mcp: FastMCP) {
   mcp.addTool({
   name: "compile_and_deploy",
@@ -21,7 +38,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       }).optional(),
       evmVersion: z.string().optional()
     }).optional().describe("Optional compiler settings"),
-    network: z.enum(["base-sepolia", "base", "avalanche-fuji", "avalanche", "polygon", "polygon-amoy", "sepolia"]).describe("Network to deploy to"),
+    network: z.string().describe("Network to deploy to (e.g., 'base-sepolia', 'sepolia', 'polygon', 'arbitrum', etc. - any network supported by viem/chains)"),
     postDeploymentCall: z.object({
       methodName: z.string().describe("Name of the method to call after deployment"),
       methodArgs: z.array(z.any()).optional().describe("Arguments to pass to the method")
@@ -82,27 +99,13 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         // Step 2: Estimate deployment gas
         const { createPublicClient, http } = await import("viem");
         const { privateKeyToAccount } = await import("viem/accounts");
-        const viemChains = await import("viem/chains");
 
         const SERVER_DEPLOYER_KEY = process.env.SERVER_DEPLOYER_PRIVATE_KEY;
         if (!SERVER_DEPLOYER_KEY) {
           throw new Error("Server deployer not configured");
         }
 
-        const chainMap: Record<string, any> = {
-          "base-sepolia": viemChains.baseSepolia,
-          "base": viemChains.base,
-          "avalanche-fuji": viemChains.avalancheFuji,
-          "avalanche": viemChains.avalanche,
-          "polygon": viemChains.polygon,
-          "polygon-amoy": viemChains.polygonAmoy,
-          "sepolia": viemChains.sepolia,
-        };
-
-        const chain = chainMap[args.network];
-        if (!chain) {
-          throw new Error(`Unsupported network: ${args.network}`);
-        }
+        const chain = await getChainFromViem(args.network);
 
         const account = privateKeyToAccount(SERVER_DEPLOYER_KEY as `0x${string}`);
         const publicClient = createPublicClient({
@@ -304,7 +307,6 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       // Step 3: Deploy using server's delegated deployer wallet
       const { createWalletClient, http, publicActions } = await import("viem");
       const { privateKeyToAccount } = await import("viem/accounts");
-      const viemChains = await import("viem/chains");
 
       // Check if server deployer private key is configured
       const SERVER_DEPLOYER_KEY = process.env.SERVER_DEPLOYER_PRIVATE_KEY;
@@ -315,22 +317,14 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         }, null, 2);
       }
 
-      // Map network name to viem chain
-      const chainMap: Record<string, any> = {
-        "base-sepolia": viemChains.baseSepolia,
-        "base": viemChains.base,
-        "avalanche-fuji": viemChains.avalancheFuji,
-        "avalanche": viemChains.avalanche,
-        "polygon": viemChains.polygon,
-        "polygon-amoy": viemChains.polygonAmoy,
-        "sepolia": viemChains.sepolia,
-      };
-
-      const chain = chainMap[args.network];
-      if (!chain) {
+      // Get chain from viem dynamically
+      let chain;
+      try {
+        chain = await getChainFromViem(args.network);
+      } catch (error: any) {
         return JSON.stringify({
           success: false,
-          error: `Unsupported network: ${args.network}`
+          error: `Failed to load chain: ${error.message}`
         }, null, 2);
       }
 

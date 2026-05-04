@@ -3,6 +3,23 @@ import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
 
+// Helper function to dynamically get chain from viem
+async function getChainFromViem(networkName: string): Promise<any> {
+  const viemChains = await import("viem/chains");
+
+  // Convert kebab-case to camelCase (e.g., "base-sepolia" -> "baseSepolia")
+  const camelCaseName = networkName.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
+  // Try to find the chain in viem
+  const chain = (viemChains as any)[camelCaseName];
+
+  if (!chain) {
+    throw new Error(`Network "${networkName}" not found in viem/chains. Please check the network name.`);
+  }
+
+  return chain;
+}
+
 export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
   mcp.addTool({
     name: "compile_and_deploy_multi_network",
@@ -21,7 +38,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
         }).optional(),
         evmVersion: z.string().optional()
       }).optional().describe("Optional compiler settings"),
-      networks: z.array(z.enum(["base-sepolia", "base", "avalanche-fuji", "avalanche", "polygon", "polygon-amoy", "sepolia"])).describe("Array of networks to deploy to"),
+      networks: z.array(z.string()).describe("Array of networks to deploy to (e.g., 'base-sepolia', 'sepolia', 'polygon', 'arbitrum', etc. - any network supported by viem/chains)"),
       postDeploymentCall: z.object({
         methodName: z.string().describe("Name of the method to call after deployment"),
         methodArgs: z.array(z.any()).optional().describe("Arguments to pass to the method")
@@ -82,22 +99,11 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
           // Step 2: Estimate gas for each network
           const { createPublicClient, http, encodeDeployData } = await import("viem");
           const { privateKeyToAccount } = await import("viem/accounts");
-          const viemChains = await import("viem/chains");
 
           const SERVER_DEPLOYER_KEY = process.env.SERVER_DEPLOYER_PRIVATE_KEY;
           if (!SERVER_DEPLOYER_KEY) {
             throw new Error("Server deployer not configured");
           }
-
-          const chainMap: Record<string, any> = {
-            "base-sepolia": viemChains.baseSepolia,
-            "base": viemChains.base,
-            "avalanche-fuji": viemChains.avalancheFuji,
-            "avalanche": viemChains.avalanche,
-            "polygon": viemChains.polygon,
-            "polygon-amoy": viemChains.polygonAmoy,
-            "sepolia": viemChains.sepolia,
-          };
 
           const account = privateKeyToAccount(SERVER_DEPLOYER_KEY as `0x${string}`);
 
@@ -112,9 +118,11 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
 
           // Estimate for each network
           for (const network of args.networks) {
-            const chain = chainMap[network];
-            if (!chain) {
-              throw new Error(`Unsupported network: ${network}`);
+            let chain;
+            try {
+              chain = await getChainFromViem(network);
+            } catch (error: any) {
+              throw new Error(`Failed to load chain "${network}": ${error.message}`);
             }
 
             const publicClient = createPublicClient({
@@ -194,12 +202,16 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
           const serviceFee = totalCostUsd * 0.3;
           const gasWithServiceFee = totalCostUsd + serviceFee;
           const baseFee = 0.05;
-          const finalCostUsd = gasWithServiceFee + baseFee;
+
+          // Add additional 10% buffer for multi-network deployments to account for nonce changes
+          const multiNetworkBuffer = gasWithServiceFee * 0.1;
+          const finalCostUsd = gasWithServiceFee + baseFee + multiNetworkBuffer;
           const usdcAmount = Math.ceil(finalCostUsd * 1_000_000).toString();
 
           console.log(`\n   Total Gas Cost: $${totalCostUsd.toFixed(6)} USD`);
           console.log(`   Service Fee (30%): $${serviceFee.toFixed(6)} USD`);
           console.log(`   Base Service Fee: $${baseFee.toFixed(6)} USD`);
+          console.log(`   Multi-Network Buffer (10%): $${multiNetworkBuffer.toFixed(6)} USD`);
           console.log(`   Total Cost: $${finalCostUsd.toFixed(6)} USD`);
 
           return createPaymentRequirements(
@@ -307,7 +319,6 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
         // Step 2: Deploy to each network
         const { createWalletClient, http, publicActions } = await import("viem");
         const { privateKeyToAccount } = await import("viem/accounts");
-        const viemChains = await import("viem/chains");
 
         const SERVER_DEPLOYER_KEY = process.env.SERVER_DEPLOYER_PRIVATE_KEY;
         if (!SERVER_DEPLOYER_KEY) {
@@ -317,28 +328,20 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
           }, null, 2);
         }
 
-        const chainMap: Record<string, any> = {
-          "base-sepolia": viemChains.baseSepolia,
-          "base": viemChains.base,
-          "avalanche-fuji": viemChains.avalancheFuji,
-          "avalanche": viemChains.avalanche,
-          "polygon": viemChains.polygon,
-          "polygon-amoy": viemChains.polygonAmoy,
-          "sepolia": viemChains.sepolia,
-        };
-
         const deployerAccount = privateKeyToAccount(SERVER_DEPLOYER_KEY as `0x${string}`);
         const deployments: any[] = [];
 
         for (const network of args.networks) {
           console.log(`\n🚀 Deploying to ${network}...`);
 
-          const chain = chainMap[network];
-          if (!chain) {
+          let chain;
+          try {
+            chain = await getChainFromViem(network);
+          } catch (error: any) {
             deployments.push({
               network,
               success: false,
-              error: `Unsupported network: ${network}`
+              error: `Failed to load chain: ${error.message}`
             });
             continue;
           }
