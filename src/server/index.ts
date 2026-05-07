@@ -6,6 +6,7 @@ import {
   registerCompileAndDeploymentTool,
   registerMultiNetworkDeploymentTool
 } from "./tools/index.js";
+import { getActiveNetwork } from "./config/network.js";
 
 // Load environment variables
 dotenv.config();
@@ -22,6 +23,9 @@ registerAnalyzeWithSlitherTool(mcp);
 registerCompileAndDeploymentTool(mcp);
 registerMultiNetworkDeploymentTool(mcp);
 
+// Get and display network configuration
+const activeNetwork = getActiveNetwork();
+
 // Start the MCP server with HTTP transport
 mcp.start({
   transportType: "httpStream",
@@ -32,8 +36,16 @@ mcp.start({
 });
 
 console.log("🚀 MCP Server running on http://localhost:8000/mcp");
-console.log("📦 Available tools:");
+console.log("\n⚙️  Network Configuration:");
+console.log(`   Network: ${activeNetwork.displayName} (${activeNetwork.name})`);
+console.log(`   Chain ID: ${activeNetwork.chainId}`);
+console.log(`   RPC URL: ${activeNetwork.rpcUrl}`);
+console.log(`   Explorer: ${activeNetwork.explorerUrl}`);
+console.log(`   USDC Address: ${activeNetwork.usdcAddress}`);
+console.log(`   💰 Payments will be processed on ${activeNetwork.displayName}`);
+console.log("\n📦 Available tools:");
 console.log("   - compile_solidity (0.01 USDC)");
 console.log("   - analyze_with_slither (0.02 USDC)");
 console.log("   - compile_and_deploy (dynamic pricing based on gas estimation, min 0.05 USDC)");
 console.log("   - compile_and_deploy_multi_network (dynamic pricing for multiple networks)");
+console.log("\n💡 Available networks: base-sepolia, base");
