@@ -64,7 +64,9 @@ try {
       contractFile: "SimpleStorage.sol",
       constructorArgs: [42], // Initial value for the constructor
       settings: compilerSettings,
-      network: "base-sepolia" // Deploy to Base Sepolia testnet
+      // Network options: "base-sepolia" (testnet) or "base" (mainnet)
+      // Can deploy to any network supported by viem/chains
+      network: "base-sepolia"
     }
   });
 

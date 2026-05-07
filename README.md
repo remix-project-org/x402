@@ -1,6 +1,6 @@
 # x402 MCP Server
 
-An MCP (Model Context Protocol) server implementing the x402 payment protocol for paid Solidity development tools using USDC on Base Sepolia.
+An MCP (Model Context Protocol) server implementing the x402 payment protocol for paid Solidity development tools using USDC on Base networks (Sepolia testnet and mainnet).
 
 ## Overview
 
@@ -20,7 +20,7 @@ This project demonstrates a complete x402 payment flow where:
   - Optional post-deployment method calls
   - Automatic transaction handling and verification
 - **x402 Payment Protocol**: Fully compliant implementation with on-chain settlement verification
-- **USDC Payments**: ERC-20 token payments on Base Sepolia testnet
+- **USDC Payments**: ERC-20 token payments on Base networks (Sepolia testnet and mainnet)
 - **Custom Wallet**: EIP-712 signature implementation for USDC compatibility
 - **MCP Integration**: Built with Ampersend SDK for seamless payment-gated tools
 
@@ -42,8 +42,11 @@ Modular MCP server implementation with payment-gated tools:
     - `compile-solidity.ts` - Solidity compilation (83 lines)
     - `analyze-slither.ts` - Security analysis via Slither (177 lines)
     - `compile-deploy.ts` - Delegated deployment with dynamic gas-based pricing (320+ lines)
+    - `compile-deploy-multi.ts` - Multi-network deployment support
   - `utils/` - Shared utilities
     - `payment.ts` - Payment verification utilities (70 lines)
+  - `config/` - Configuration management
+    - `network.ts` - Centralized network configuration for easy mainnet/testnet switching
 - Verifies X402 payments on-chain before executing tools
 - Integrates with Remix API for Slither analysis
 - Provides Delegated Deployment Service for secure contract deployment
