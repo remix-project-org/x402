@@ -2,6 +2,7 @@ import { withX402Payment, type FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/s
 import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
+import { getRpcUrl } from "../config/network.js";
 
 // Helper function to dynamically get chain from viem
 async function getChainFromViem(networkName: string): Promise<any> {
@@ -125,9 +126,11 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
               throw new Error(`Failed to load chain "${network}": ${error.message}`);
             }
 
+            // Use configured RPC URL if available
+            const rpcUrl = getRpcUrl(network);
             const publicClient = createPublicClient({
               chain,
-              transport: http()
+              transport: http(rpcUrl)
             });
 
             console.log(`\n   Estimating for ${network}...`);
@@ -347,10 +350,12 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
           }
 
           try {
+            // Use configured RPC URL if available
+            const rpcUrl = getRpcUrl(network);
             const walletClient = createWalletClient({
               account: deployerAccount,
               chain,
-              transport: http()
+              transport: http(rpcUrl)
             }).extend(publicActions);
 
             const hash = await walletClient.deployContract({

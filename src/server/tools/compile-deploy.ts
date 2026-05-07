@@ -2,6 +2,7 @@ import { withX402Payment, type FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/s
 import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
+import { getRpcUrl } from "../config/network.js";
 
 // Helper function to dynamically get chain from viem
 async function getChainFromViem(networkName: string): Promise<any> {
@@ -108,9 +109,12 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         const chain = await getChainFromViem(args.network);
 
         const account = privateKeyToAccount(SERVER_DEPLOYER_KEY as `0x${string}`);
+
+        // Use configured RPC URL if available
+        const rpcUrl = getRpcUrl(args.network);
         const publicClient = createPublicClient({
           chain,
-          transport: http()
+          transport: http(rpcUrl)
         });
 
         // Estimate deployment gas
@@ -331,11 +335,12 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       // Create server's deployer account
       const deployerAccount = privateKeyToAccount(SERVER_DEPLOYER_KEY as `0x${string}`);
 
-      // Create wallet client
+      // Create wallet client with configured RPC URL
+      const rpcUrl = getRpcUrl(args.network);
       const walletClient = createWalletClient({
         account: deployerAccount,
         chain,
-        transport: http()
+        transport: http(rpcUrl)
       }).extend(publicActions);
 
       console.log(`🚀 Deploying contract using server's delegated deployer...`);

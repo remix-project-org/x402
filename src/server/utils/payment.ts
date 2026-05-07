@@ -1,5 +1,6 @@
 import { verify } from "x402/facilitator";
 import { createConnectedClient } from "x402/types";
+import { getActiveNetwork } from "../config/network.js";
 
 /**
  * Create payment requirements for a tool
@@ -9,16 +10,18 @@ export function createPaymentRequirements(
   amount: string,
   description: string
 ) {
+  const network = getActiveNetwork();
+
   return {
     scheme: "exact" as const,
     description,
-    network: "base-sepolia" as const,
+    network: network.name as any,
     maxAmountRequired: amount,
     resource,
     mimeType: "application/json",
     payTo: process.env.PAY_TO_ADDRESS as string,
     maxTimeoutSeconds: 300,
-    asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
+    asset: network.usdcAddress,
     extra: {
       name: "USDC",
       version: "2",
