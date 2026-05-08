@@ -10,7 +10,8 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
     sources: z.record(z.string(), z.object({
       content: z.string()
     })).describe("Object with contract filenames as keys and their content"),
-    version: z.string().optional().describe("Solidity compiler version (e.g., '0.8.26+commit.8a97fa7a'). Defaults to 0.8.26"),
+    version: z.string().optional().describe("Solidity compiler version (e.g., '0.8.28+commit.7893614a'). Defaults to 0.8.28"),
+    remappings: z.array(z.string()).optional().describe("Optional Solidity import remappings (e.g., ['@openzeppelin/=node_modules/@openzeppelin/'])"),
     detectors: z.array(z.string()).optional().describe("Optional list of specific detectors to run (e.g., ['reentrancy-eth', 'tx-origin']). Filters results client-side."),
     excludeInformational: z.boolean().optional().describe("Exclude informational severity findings (default: false)"),
     excludeLow: z.boolean().optional().describe("Exclude low severity findings (default: false)")
@@ -27,6 +28,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
   })(async (args: {
     sources: Record<string, { content: string }>,
     version?: string,
+    remappings?: string[],
     detectors?: string[],
     excludeInformational?: boolean,
     excludeLow?: boolean
@@ -35,27 +37,25 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
       // Use Remix Slither API endpoint
       const SLITHER_API_URL = 'https://mcp.api.remix.live/slither/analyze';
 
-      // Get the first source file's content (Remix API expects a single contract)
+      // Validate that sources are provided
       const fileEntries = Object.entries(args.sources);
       if (fileEntries.length === 0) {
         throw new Error("No source files provided");
       }
-      const firstEntry = fileEntries[0]!;
-      const filename = firstEntry[0];
-      const fileContent = firstEntry[1];
+      // Prepare the request payload in Remix API format with all source files
 
-      // Prepare the request payload in Remix API format
-      const requestPayload = {
-        sources: {
-          [filename]: {
-            content: fileContent.content
-          }
-        },
-        version: args.version || "0.8.26+commit.8a97fa7a"
+      const requestPayload: any = {
+        sources: args.sources,
+        version: args.version || "0.8.28+commit.7893614a"
       };
 
+      // Add remappings if provided
+      if (args.remappings && args.remappings.length > 0) {
+        requestPayload.remappings = args.remappings;
+      }
+
       console.log(`🔍 Sending Slither analysis request to Remix API...`);
-      console.log(`   File: ${filename}`);
+      console.log(`   Files: ${fileEntries.map(([name]) => name).join(', ')}`);
 
       // Make the API request
       const response = await fetch(SLITHER_API_URL, {
@@ -80,44 +80,118 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
         const analysisText = slitherResult.analysis as string;
 
         // Extract detector findings from the text output
-        const detectorMatches = analysisText.split('INFO:Detectors:\nDetector: ');
+        // Split by "INFO:Detectors:" to get each detector section
+        const detectorSections = analysisText.split(/INFO:Detectors:\n/);
         const findings: any[] = [];
 
-        // Skip the first element (before first detector)
-        for (let i = 1; i < detectorMatches.length; i++) {
-          const detectorBlock = detectorMatches[i];
-          if (!detectorBlock) continue;
+        // Process each detector section (skip first which is before any detectors)
+        for (let i = 1; i < detectorSections.length; i++) {
+          const section = detectorSections[i];
+          if (!section || !section.trim()) continue;
 
-          const lines = detectorBlock.split('\n');
-          const detectorName = lines[0]?.trim() || 'unknown';
-
-          // Extract the description (everything before "Reference:")
-          const referenceIndex = detectorBlock.indexOf('Reference:');
-          const description = referenceIndex > 0
-            ? detectorBlock.substring(detectorName.length, referenceIndex).trim()
-            : detectorBlock.substring(detectorName.length).trim();
-
-          // Extract reference URL if present
-          const referenceMatch = detectorBlock.match(/Reference: (https?:\/\/[^\s]+)/);
+          // Extract the reference URL for this section
+          const referenceMatch = section.match(/Reference:\s*(https?:\/\/[^\s]+)/);
           const reference = referenceMatch ? referenceMatch[1] : '';
 
-          // Determine impact level based on detector name
-          let impact = 'Informational';
-          if (['reentrancy-eth', 'reentrancy-no-eth', 'suicidal', 'unprotected-upgrade'].includes(detectorName)) {
-            impact = 'High';
-          } else if (['reentrancy-benign', 'reentrancy-events', 'tx-origin', 'unchecked-transfer'].includes(detectorName)) {
-            impact = 'Medium';
-          } else if (['low-level-calls', 'naming-convention', 'solc-version'].includes(detectorName)) {
-            impact = 'Low';
+          // Get the description (everything before Reference or end of section)
+          const referenceIndex = section.indexOf('Reference:');
+          const nextSectionIndex = section.indexOf('INFO:');
+          let endIndex = section.length;
+          if (referenceIndex > 0) {
+            endIndex = referenceIndex;
+          } else if (nextSectionIndex > 0) {
+            endIndex = nextSectionIndex;
           }
 
-          findings.push({
-            check: detectorName,
-            impact,
-            confidence: 'Medium', // Default confidence
-            description,
-            reference
-          });
+          const descriptionPart = section.substring(0, endIndex).trim();
+          const fullDescription = descriptionPart;
+
+          // Try to extract detector name from various patterns
+          let detectorName = 'unknown';
+
+          // Extract a meaningful check name from the content
+          if (fullDescription.includes('has bitwise-xor operator')) {
+            detectorName = 'incorrect-exp';
+          } else if (fullDescription.includes('performs a multiplication on the result of a division')) {
+            detectorName = 'divide-before-multiply';
+          } else if (fullDescription.includes('uses assembly')) {
+            detectorName = 'assembly';
+          } else if (fullDescription.includes('different versions of Solidity')) {
+            detectorName = 'solc-version';
+          } else if (fullDescription.includes('is never used and should be removed')) {
+            detectorName = 'dead-code';
+          } else if (fullDescription.includes('contains known severe issues')) {
+            detectorName = 'solc-version-issues';
+          } else if (fullDescription.includes('uses literals with too many digits')) {
+            detectorName = 'too-many-digits';
+          }
+
+          // Determine impact level based on detector name and content
+          let impact = 'Informational';
+          if (['reentrancy-eth', 'reentrancy-no-eth', 'suicidal', 'unprotected-upgrade', 'incorrect-exp'].includes(detectorName)) {
+            impact = 'Medium';
+          } else if (['divide-before-multiply', 'tx-origin', 'unchecked-transfer'].includes(detectorName)) {
+            impact = 'Low';
+          } else if (['assembly', 'solc-version', 'dead-code', 'solc-version-issues', 'too-many-digits'].includes(detectorName)) {
+            impact = 'Informational';
+          }
+
+          // Parse individual findings within this detector section
+          // Most detectors list individual instances, one per paragraph/block
+          const lines = descriptionPart.split('\n');
+          const individualFindings: string[] = [];
+          let currentFinding = '';
+
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+
+            // Detect start of new finding based on patterns
+            const isNewFinding =
+              // Function/contract references like "Math.mulDiv(...)" or "Context._msgData()"
+              (line.match(/^[A-Z][a-zA-Z0-9_]*\.[a-zA-Z_]/) && !line.startsWith('\t')) ||
+              // Version constraints
+              line.match(/^Version\s+constraint/) ||
+              // Count statements like "7 different versions"
+              line.match(/^\d+\s+different/) ||
+              // It is used statements
+              line.match(/^It\s+is\s+used\s+by:/) ||
+              // Empty line followed by new content (paragraph separator)
+              (!trimmedLine && currentFinding.trim());
+
+            if (isNewFinding && currentFinding.trim()) {
+              individualFindings.push(currentFinding.trim());
+              currentFinding = trimmedLine ? line : '';
+            } else if (trimmedLine) {
+              currentFinding += (currentFinding ? '\n' : '') + line;
+            }
+          }
+
+          // Add the last finding
+          if (currentFinding.trim()) {
+            individualFindings.push(currentFinding.trim());
+          }
+
+          // Create findings - if we successfully parsed individual items, use them
+          // Otherwise treat the whole section as one finding
+          if (individualFindings.length > 0) {
+            for (const individualFinding of individualFindings) {
+              findings.push({
+                check: detectorName,
+                impact,
+                confidence: 'Medium',
+                description: individualFinding,
+                reference
+              });
+            }
+          } else {
+            findings.push({
+              check: detectorName,
+              impact,
+              confidence: 'Medium',
+              description: fullDescription,
+              reference
+            });
+          }
         }
 
         // Apply client-side filters if requested
@@ -154,7 +228,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
 
         console.log(`✅ Slither analysis completed`);
         console.log(`   Total findings: ${summary.totalFindings}`);
-        console.log(`   High: ${summary.high}, Medium: ${summary.medium}, Low: ${summary.low}`);
+        console.log(`   High: ${summary.high}, Medium: ${summary.medium}, Low: ${summary.low}, Informational: ${summary.informational}`);
       } else {
         analysisResult = {
           success: false,
