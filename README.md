@@ -70,7 +70,9 @@ yarn install
 
 ## Configuration
 
-1. Create a `.env` file in the project root:
+### Server Configuration
+
+Create a `.env` file in the project root:
 
 ```env
 # Your wallet private key (DO NOT commit this!)
@@ -84,7 +86,27 @@ PAY_TO_ADDRESS=0x...
 SERVER_DEPLOYER_PRIVATE_KEY=0x...
 ```
 
-2. Get testnet USDC
+### E2E Test Configuration
+
+Create a `.env.test` file for running E2E tests:
+
+```env
+# Test wallet private key (needs USDC on Base Sepolia)
+PRIVATE_KEY=0x...
+
+# Payment recipient address
+PAY_TO_ADDRESS=0x...
+
+# Network (must be base-sepolia for E2E tests)
+NETWORK=base-sepolia
+
+# MCP Server URL
+MCP_SERVER_URL=http://localhost:8000/mcp
+```
+
+### Getting Test USDC
+
+Get testnet USDC from [Circle Faucet](https://faucet.circle.com/) for Base Sepolia testing
 
 ## Building
 
@@ -101,12 +123,44 @@ yarn build
 ### 1. Start the MCP Server
 
 ```bash
-yarn start
+# Build and start the server
+yarn build && yarn start
 ```
 
 The server will start on `http://localhost:8000/mcp`
 
-### 2. Run the Clients
+### 2. Run E2E Tests
+
+End-to-end tests verify the complete payment and tool execution flow with real blockchain transactions.
+
+**Prerequisites:**
+- MCP server must be running (see step 1)
+- Test wallet funded with USDC on Base Sepolia
+- Configure `.env.test` with your test wallet private key
+
+**Run tests:**
+```bash
+# Run all E2E tests
+yarn test
+
+# Watch mode
+yarn test:watch
+
+# Verbose output
+yarn test:verbose
+```
+
+**Test coverage:**
+- ✅ Basic compilation with automatic payment
+- ✅ Custom compiler settings
+- ✅ Multiple files with imports
+- ✅ Error handling
+- ✅ Warnings vs errors
+- ✅ Payment flow verification
+
+**Cost per test run:** ~0.06 USDC + gas fees (6 tests × 0.01 USDC each)
+
+### 3. Run the Clients
 
 All client examples are organized in the `clients/` directory. You can:
 
