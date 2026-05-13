@@ -8,6 +8,10 @@
     "build": "tsc",
     "start": "node dist/server/index.js",
     "dev": "ts-node src/server/index.ts",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "test:verbose": "NODE_OPTIONS=--experimental-vm-modules jest --verbose",
     "example:compile": "node src/examples/compile.js",
     "example:slither": "node src/examples/slither.js",
     "example:deploy": "node src/examples/deploy.js",
@@ -17,7 +21,11 @@
   "author": "Aniket-Engg",
   "license": "ISC",
   "devDependencies": {
+    "@jest/globals": "^30.4.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2"
   },
