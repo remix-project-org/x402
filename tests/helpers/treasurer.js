@@ -17,19 +17,12 @@ export class Treasurer {
 
   async onPaymentRequired(requirements, _context) {
     if (requirements.length === 0) return null;
-
-    console.log("💰 Payment required:");
-    console.log(`   Amount: ${requirements[0].maxAmountRequired}`);
-
     // Use our custom USDCWallet to create payment with correct signature
     const payment = await this.wallet.createPayment(requirements[0]);
 
     // Store payment details
     this.lastPayment = payment;
     this.lastRequirements = requirements[0];
-
-    console.log("\n💳 Payment authorization created");
-    console.log("   Payment object:", JSON.stringify(payment, null, 2));
 
     // IMMEDIATELY settle payment on-chain (client pays gas)
     console.log("\n⛓️  Settling payment on-chain (client pays gas)...");
@@ -46,10 +39,6 @@ export class Treasurer {
       const settleResponse = await settle(signer, payment, requirements[0]);
 
       if (settleResponse.success) {
-        console.log(`✅ Payment settled on-chain successfully!`);
-        console.log(`   Transaction: ${settleResponse.transaction}`);
-        console.log(`   Network: ${settleResponse.network}`);
-        console.log(`   Client paid gas fees for settlement`);
         this.lastSettlement = settleResponse;
       } else {
         console.error(`❌ Settlement failed: ${settleResponse.errorReason}`);
