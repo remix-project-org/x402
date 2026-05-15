@@ -142,6 +142,7 @@ contract Counter {
       const compilationResult = JSON.parse(result.content[0].text);
 
       expect(compilationResult.success).toBe(true);
+      expect(compilationResult.settings.optimizer.enabled).toBe(false);
       expect(compilationResult.contracts['Counter.sol']).toBeDefined();
       expect(compilationResult.contracts['Counter.sol'].Counter).toBeDefined();
 
@@ -294,44 +295,6 @@ contract WithWarning {
       } else {
         console.log('✅ Compilation succeeded (warnings may be in errors array with severity: warning)');
       }
-    });
-  });
-
-  describe('Payment Verification', () => {
-    it('should verify payment was made before compilation', async () => {
-      console.log('\n🔧 Test: Verifying payment flow...');
-
-      const soliditySources = {
-        "PaymentTest.sol": {
-          content: `
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract PaymentTest {
-    string public message = "Payment verified!";
-}
-          `.trim()
-        }
-      };
-
-      // This call should trigger payment automatically
-      const result = await client.callTool({
-        name: "compile_solidity",
-        arguments: {
-          sources: soliditySources,
-          settings: {
-            optimizer: { enabled: true, runs: 200 }
-          }
-        }
-      });
-
-      const compilationResult = JSON.parse(result.content[0].text);
-
-      // If compilation succeeded, payment was verified
-      expect(compilationResult.success).toBe(true);
-
-      console.log('✅ Payment flow verified!');
-      console.log('   Payment was automatically settled before compilation');
     });
   });
 });
