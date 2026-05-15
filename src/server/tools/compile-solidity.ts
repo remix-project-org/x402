@@ -50,7 +50,14 @@ export function registerCompileSolidityTool(mcp: FastMCP) {
               success: true,
               contracts: data.contracts,
               sources: data.sources,
-              errors: data.errors?.filter((e: any) => e.severity === "warning") || []
+              errors: data.errors?.filter((e: any) => e.severity === "warning") || [],
+              settings: {
+                optimizer: {
+                  enabled: args.settings?.optimizer?.enabled ?? true,
+                  runs: args.settings?.optimizer?.runs ?? 200
+                },
+                evmVersion: args.settings?.evmVersion ?? "london"
+              }
             };
             resolve(JSON.stringify(result, null, 2));
           } else {

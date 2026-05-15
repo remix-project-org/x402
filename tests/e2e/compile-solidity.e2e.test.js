@@ -1,9 +1,34 @@
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
 import { createMCPClient } from '../helpers/index.js';
+import { createPublicClient, http } from 'viem';
+import { baseSepolia } from 'viem/chains';
 
 describe('Compile Solidity E2E Tests', () => {
-  let client, transport, wallet;
+  let client, transport, wallet, publicClient;
   const serverUrl = process.env.MCP_SERVER_URL || 'http://localhost:8000/mcp';
+  const payToAddress = process.env.PAY_TO_ADDRESS;
+  const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
+  const EXPECTED_COMPILATION_COST = 10000n; // 0.01 USDC (in smallest units)
+
+  // ERC20 ABI for balanceOf
+  const erc20Abi = [
+    {
+      constant: true,
+      inputs: [{ name: '_owner', type: 'address' }],
+      name: 'balanceOf',
+      outputs: [{ name: 'balance', type: 'uint256' }],
+      type: 'function',
+    },
+  ];
+
+  async function getUSDCBalance(address) {
+    return await publicClient.readContract({
+      address: usdcAddress,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [address],
+    });
+  }
 
   beforeAll(async () => {
     console.log('\n🔌 Connecting to MCP server...');
@@ -16,9 +41,16 @@ describe('Compile Solidity E2E Tests', () => {
     transport = mcpSetup.transport;
     wallet = mcpSetup.wallet;
 
+    // Create public client for balance checks
+    publicClient = createPublicClient({
+      chain: baseSepolia,
+      transport: http(),
+    });
+
     await client.connect(transport);
     console.log('✅ Connected to MCP server');
     console.log(`💼 Test wallet address: ${wallet.address}`);
+    console.log(`💰 Payment recipient: ${payToAddress}`);
   });
 
   afterAll(async () => {
@@ -95,7 +127,6 @@ contract SimpleStorage {
       expect(simpleStorage.evm.bytecode.object).toBeTruthy();
 
       console.log('✅ Compilation successful!');
-      console.log('   Payment was settled on-chain and verified');
     });
 
     it('should compile contract with custom optimizer settings', async () => {
@@ -146,7 +177,54 @@ contract Counter {
       expect(compilationResult.contracts['Counter.sol']).toBeDefined();
       expect(compilationResult.contracts['Counter.sol'].Counter).toBeDefined();
 
-      console.log('✅ Custom settings compilation successful!');
+    });
+
+    it('should verify payment was made by checking balance changes', async () => {
+
+      if (!payToAddress) {
+        console.log('⚠️  PAY_TO_ADDRESS not set, skipping balance verification');
+        return;
+      }
+
+      // Get initial balance of payment recipient
+      const initialBalance = await getUSDCBalance(payToAddress);
+
+      const soliditySources = {
+        "PaymentVerification.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract PaymentVerification {
+    uint256 public value = 42;
+}
+          `.trim()
+        }
+      };
+
+      // Compile - this should trigger payment
+      const result = await client.callTool({
+        name: "compile_solidity",
+        arguments: {
+          sources: soliditySources,
+          settings: {
+            optimizer: { enabled: true, runs: 200 }
+          }
+        }
+      });
+
+      const compilationResult = JSON.parse(result.content[0].text);
+      expect(compilationResult.success).toBe(true);
+
+      // Get final balance of payment recipient
+      const finalBalance = await getUSDCBalance(payToAddress);
+
+      // Verify that payment was made (balance increased)
+      expect(finalBalance).toBeGreaterThan(initialBalance);
+      const paymentAmount = finalBalance - initialBalance;
+
+      // Verify the payment amount matches the expected compilation cost
+      expect(paymentAmount).toBe(EXPECTED_COMPILATION_COST);
     });
   });
 
