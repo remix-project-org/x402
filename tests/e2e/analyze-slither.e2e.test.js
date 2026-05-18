@@ -166,6 +166,74 @@ contract SimpleStorage {
       console.log(`   Total findings: ${analysisResult.summary.totalFindings}`);
     });
 
+    it('should analyze contracts with imports', async () => {
+      console.log('\n🔧 Test: Analyzing contracts with imports...');
+
+      const soliditySources = {
+        "Ownable.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Ownable {
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(tx.origin == owner, "Not owner");
+        _;
+    }
+
+    function transferOwnership(address newOwner) public onlyOwner {
+        owner = newOwner;
+    }
+}
+          `.trim()
+        },
+        "Wallet.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./Ownable.sol";
+
+contract Wallet is Ownable {
+    mapping(address => uint256) public balances;
+
+    function deposit() public payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw() public onlyOwner {
+        payable(owner).transfer(address(this).balance);
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "analyze_with_slither",
+        arguments: {
+          sources: soliditySources,
+          excludeInformational: false,
+          excludeLow: false
+        }
+      });
+
+      const analysisResult = JSON.parse(result.content[0].text);
+
+      expect(analysisResult.success).toBe(true);
+      expect(analysisResult.summary).toBeDefined();
+      expect(analysisResult.findings).toBeDefined();
+
+      // If imports work correctly, we should have at least some findings (solc-version, naming-convention, or tx.origin)
+      expect(analysisResult.summary.totalFindings).toEqual(3);
+    });
+
     it('should verify payment was made by checking balance changes', async () => {
       console.log('\n🔧 Test: Verifying payment through balance check...');
 
