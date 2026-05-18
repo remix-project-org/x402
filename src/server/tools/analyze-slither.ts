@@ -149,7 +149,8 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
           summary,
           findings: filteredFindings,
           rawAnalysis: analysisText,
-          rawOutput: slitherResult
+          rawOutput: slitherResult,
+          compilerVersion: args.version || "0.8.26+commit.8a97fa7a"
         };
 
         console.log(`✅ Slither analysis completed`);
