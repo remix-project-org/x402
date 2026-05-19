@@ -269,6 +269,10 @@ contract PaymentTest {
       const analysisResult = JSON.parse(result.content[0].text);
       expect(analysisResult.success).toBe(true);
 
+      // Wait for blockchain transaction to be confirmed
+      console.log('⏳ Waiting for payment transaction to be confirmed...');
+      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+
       // Get final balance of payment recipient
       const finalBalance = await getUSDCBalance(payToAddress);
       console.log(`💰 Final balance of ${payToAddress}: ${finalBalance} USDC`);
