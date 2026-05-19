@@ -30,9 +30,16 @@ jobs:
 
       - name: Create .env file for tests
         run: |
-          cp .env.test .env
-          echo "PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}" >> .env
-          echo "PAY_TO_ADDRESS=${{ secrets.PAY_TO_ADDRESS }}" >> .env
+          cat > .env << EOF
+          # E2E Test Configuration
+          PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          PAY_TO_ADDRESS=${{ secrets.PAY_TO_ADDRESS }}
+          SERVER_DEPLOYER_PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          NETWORK=base-sepolia
+          BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+          MCP_SERVER_URL=http://localhost:8000/mcp
+          TEST_TIMEOUT=60000
+          EOF
 
       - name: Start MCP Server
         run: yarn start &
