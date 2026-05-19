@@ -245,6 +245,14 @@ contract Wallet is Ownable {
       const initialBalance = await getUSDCBalance(payToAddress);
       console.log(`💰 Initial balance of ${payToAddress}: ${initialBalance} USDC`);
 
+      // Wait to ensure any pending transactions from previous tests have settled
+      console.log('⏳ Waiting for any pending transactions to settle...');
+      await new Promise(resolve => setTimeout(resolve, 15000)); // Wait 15 seconds
+
+      // Re-check balance after waiting to get accurate baseline
+      const baselineBalance = await getUSDCBalance(payToAddress);
+      console.log(`💰 Baseline balance: ${baselineBalance} USDC`);
+
       const soliditySources = {
         "PaymentTest.sol": {
           content: `
@@ -278,12 +286,13 @@ contract PaymentTest {
       console.log(`💰 Final balance of ${payToAddress}: ${finalBalance} USDC`);
 
       // Verify that payment was made (balance increased)
-      expect(finalBalance).toBeGreaterThan(initialBalance);
-      const paymentAmount = finalBalance - initialBalance;
-      console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC`);
+      expect(finalBalance).toBeGreaterThan(baselineBalance);
+      const paymentAmount = finalBalance - baselineBalance;
 
-      // Verify the payment amount matches the expected analysis cost
+      // Verify the payment amount matches exactly one analysis cost
       expect(paymentAmount).toBe(EXPECTED_SLITHER_COST);
+
+      console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC`);
     });
   });
 
