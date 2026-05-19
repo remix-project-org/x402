@@ -100,7 +100,6 @@ contract VulnerableContract {
         }
       });
 
-      console.log('📦 Received analysis result');
 
       // Parse the result
       expect(result).toBeDefined();
@@ -116,12 +115,15 @@ contract VulnerableContract {
       expect(analysisResult.findings).toBeDefined();
       expect(Array.isArray(analysisResult.findings)).toBe(true);
 
-      console.log(`   Total findings: ${analysisResult.summary.totalFindings}`);
-      console.log(`   High: ${analysisResult.summary.high}, Medium: ${analysisResult.summary.medium}, Low: ${analysisResult.summary.low}`);
+      // Verify total findings count (tx.origin vulnerability + other detectors)
+      expect(analysisResult.summary.totalFindings).toEqual(3);
+      expect(analysisResult.summary.high).toEqual(0);
+      expect(analysisResult.summary.medium).toEqual(1);
+      expect(analysisResult.summary.low).toEqual(1);
+      expect(analysisResult.summary.informational).toEqual(1);
     });
 
     it('should analyze contract with custom version', async () => {
-      console.log('\n🔧 Test: Analyzing with custom compiler version...');
 
       const soliditySources = {
         "SimpleStorage.sol": {
@@ -161,13 +163,10 @@ contract SimpleStorage {
       // Verify the compiler version matches what was requested
       expect(analysisResult.compilerVersion).toBe("0.8.26+commit.8a97fa7a");
 
-      console.log('✅ Analysis with custom version successful!');
       console.log(`   Compiler version: ${analysisResult.compilerVersion}`);
-      console.log(`   Total findings: ${analysisResult.summary.totalFindings}`);
     });
 
     it('should analyze contracts with imports', async () => {
-      console.log('\n🔧 Test: Analyzing contracts with imports...');
 
       const soliditySources = {
         "Ownable.sol": {
@@ -281,7 +280,6 @@ contract PaymentTest {
 
       // Verify the payment amount matches the expected analysis cost
       expect(paymentAmount).toBe(EXPECTED_SLITHER_COST);
-      console.log(`✅ Payment amount matches expected cost: ${EXPECTED_SLITHER_COST} USDC (0.02 USDC)`);
     });
   });
 
@@ -327,7 +325,6 @@ contract Contract {
       expect(hasInformational).toBe(false);
       expect(hasLow).toBe(false);
 
-      console.log('✅ Filtering successful!');
       console.log(`   Filtered findings: ${analysisResult.summary.totalFindings}`);
     });
   });
@@ -361,8 +358,14 @@ contract Broken {
 
       // Should return a result even with errors
       expect(analysisResult).toBeDefined();
+      expect(analysisResult).toHaveProperty('success');
+      expect(analysisResult.success).toBe(false);
+      expect(analysisResult).toHaveProperty('error');
+      expect(typeof analysisResult.error).toBe('string');
+      expect(analysisResult.error.length).toBeGreaterThan(0);
+      expect(analysisResult.error).toContain('Compiler run failed');
 
-      console.log('✅ Error handling successful!');
+      console.log(`   Error message: ${analysisResult.error}`);
     });
   });
 });

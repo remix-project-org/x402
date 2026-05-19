@@ -1,0 +1,82 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build project
+        run: yarn build
+
+      - name: Create .env file for tests
+        run: |
+          cp .env.test .env
+          echo "PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}" >> .env
+          echo "PAY_TO_ADDRESS=${{ secrets.PAY_TO_ADDRESS }}" >> .env
+
+      - name: Start MCP Server
+        run: yarn start &
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
+          SERVER_DEPLOYER_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          NETWORK: base-sepolia
+          BASE_SEPOLIA_RPC_URL: https://sepolia.base.org
+
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for MCP server to start..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/mcp > /dev/null 2>&1; then
+              echo "Server is ready!"
+              exit 0
+            fi
+            echo "Attempt $i: Server not ready yet, waiting..."
+            sleep 2
+          done
+          echo "Server failed to start in time"
+          exit 1
+
+      - name: Run E2E Tests
+        env:
+          MCP_SERVER_URL: http://localhost:8000/mcp
+          PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          yarn test tests/e2e/compile-solidity.e2e.test.js
+          yarn test tests/e2e/analyze-slither.e2e.test.js
+
+      - name: Stop MCP Server
+        if: always()
+        run: |
+          pkill -f "node dist/server/index.js" || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            coverage/
+            test-results/
+          retention-days: 30
