@@ -189,6 +189,14 @@ contract Counter {
       // Get initial balance of payment recipient
       const initialBalance = await getUSDCBalance(payToAddress);
 
+      // Wait to ensure any pending transactions from previous tests have settled
+      console.log('⏳ Waiting for any pending transactions to settle...');
+      await new Promise(resolve => setTimeout(resolve, 15000)); // Wait 15 seconds
+
+      // Re-check balance after waiting to get accurate baseline
+      const baselineBalance = await getUSDCBalance(payToAddress);
+      console.log(`💰 Baseline balance: ${baselineBalance} USDC`);
+
       const soliditySources = {
         "PaymentVerification.sol": {
           content: `
@@ -224,11 +232,13 @@ contract PaymentVerification {
       const finalBalance = await getUSDCBalance(payToAddress);
 
       // Verify that payment was made (balance increased)
-      expect(finalBalance).toBeGreaterThan(initialBalance);
-      const paymentAmount = finalBalance - initialBalance;
+      expect(finalBalance).toBeGreaterThan(baselineBalance);
+      const paymentAmount = finalBalance - baselineBalance;
 
-      // Verify the payment amount matches the expected compilation cost
+      // Verify the payment amount matches exactly one compilation cost
       expect(paymentAmount).toBe(EXPECTED_COMPILATION_COST);
+
+      console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC`);
     });
   });
 
