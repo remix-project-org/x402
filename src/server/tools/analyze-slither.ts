@@ -71,7 +71,16 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
       if (slitherResult && slitherResult.success && slitherResult.analysis) {
         // The analysis field is a JSON string, parse it first
         const analysisText = slitherResult.analysis as string;
-        const analysisData = JSON.parse(analysisText);
+        let analysisData;
+        try {
+          analysisData = JSON.parse(analysisText);
+        } catch (parseError: any) {
+          // If parsing fails, it's likely a compilation error message
+          return JSON.stringify({
+            success: false,
+            error: `Failed to parse analysis result: ${parseError.message}. Raw output: ${analysisText.substring(0, 500)}`
+          }, null, 2);
+        }
         const findings: any[] = [];
 
         // Check if we have JSON-based results (new format)
@@ -239,6 +248,13 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
         console.log(`✅ Slither analysis completed`);
         console.log(`   Total findings: ${summary.totalFindings}`);
         console.log(`   High: ${summary.high}, Medium: ${summary.medium}, Low: ${summary.low}, Informational: ${summary.informational}`);
+      } else if (slitherResult && !slitherResult.success) {
+        // Remix API returned an error
+        analysisResult = {
+          success: false,
+          error: slitherResult.error || slitherResult.message || "Slither analysis failed",
+          rawOutput: slitherResult
+        };
       } else {
         analysisResult = {
           success: false,
