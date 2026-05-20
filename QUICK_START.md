@@ -4,7 +4,7 @@
 
 ```
 src/
-├── client/      🔧 SDK library (treasurer, wallets, transport)
+├── lib/         🔧 SDK library (treasurer, wallets, transport)
 ├── examples/    📁 Working examples for each tool
 └── server/      🖥️ MCP server with payment-gated tools
 ```
@@ -61,7 +61,7 @@ SERVER_DEPLOYER_PRIVATE_KEY=0x...    # Server deployer (for DDS)
 ```
 Example (src/examples/)
     ↓
-Client SDK (src/client/)
+Client SDK (src/lib/)
     ↓
 MCP Server (src/server/)
     ↓
