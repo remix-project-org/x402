@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
-import { createMCPClient } from '../helpers/index.js';
+import { createMCPClient } from '../../src/lib/index.js';
 import { createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
 

@@ -27,7 +27,7 @@ This project demonstrates a complete x402 payment flow where:
 ## Architecture
 
 ### Client Side
-- `src/client/` - Client SDK for MCP communication and X402 payments
+- `src/lib/` - Client SDK for MCP communication and X402 payments
   - `index.js` - MCP client factory
   - `treasurer.js` - Payment authorization and settlement
   - `usdc-wallet.js` - USDC-compatible wallet implementation
