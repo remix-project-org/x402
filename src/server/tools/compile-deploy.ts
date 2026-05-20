@@ -369,7 +369,14 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       const result: any = {
         success: true,
         compilation: {
-          warnings: compilationResult.errors || []
+          warnings: compilationResult.errors || [],
+          settings: {
+            optimizer: {
+              enabled: args.settings?.optimizer?.enabled ?? true,
+              runs: args.settings?.optimizer?.runs ?? 200
+            },
+            evmVersion: args.settings?.evmVersion ?? "london"
+          }
         },
         deployment: {
           success: true,

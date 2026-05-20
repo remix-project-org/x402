@@ -1,0 +1,618 @@
+import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
+import { createMCPClient } from '../../src/lib/index.js';
+import { createPublicClient, http, parseAbi } from 'viem';
+import { baseSepolia } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
+
+describe('Compile and Deploy E2E Tests', () => {
+  let client, transport, wallet, publicClient, expectedDeployerAddress;
+  const serverUrl = process.env.MCP_SERVER_URL || 'http://localhost:8000/mcp';
+  const payToAddress = process.env.PAY_TO_ADDRESS;
+  const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'; // Base Sepolia USDC
+  const EXPECTED_DEPLOYMENT_COST = 50000n; // 0.05 USDC (in smallest units)
+
+  // Derive the expected deployer address from the server's private key
+  if (!process.env.SERVER_DEPLOYER_PRIVATE_KEY) {
+    throw new Error('SERVER_DEPLOYER_PRIVATE_KEY environment variable is required for deployment tests');
+  }
+  const deployerAccount = privateKeyToAccount(process.env.SERVER_DEPLOYER_PRIVATE_KEY);
+  expectedDeployerAddress = deployerAccount.address;
+
+  // ERC20 ABI for balanceOf
+  const erc20Abi = [
+    {
+      constant: true,
+      inputs: [{ name: '_owner', type: 'address' }],
+      name: 'balanceOf',
+      outputs: [{ name: 'balance', type: 'uint256' }],
+      type: 'function',
+    },
+  ];
+
+  async function getUSDCBalance(address) {
+    return await publicClient.readContract({
+      address: usdcAddress,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [address],
+    });
+  }
+
+  beforeAll(async () => {
+    console.log('\n🔌 Connecting to MCP server...');
+    const mcpSetup = createMCPClient(serverUrl, {
+      name: 'E2E-Deploy-Test-Client',
+      version: '1.0.0'
+    });
+
+    client = mcpSetup.client;
+    transport = mcpSetup.transport;
+    wallet = mcpSetup.wallet;
+
+    // Create public client for balance checks and contract interactions
+    publicClient = createPublicClient({
+      chain: baseSepolia,
+      transport: http(),
+    });
+
+    await client.connect(transport);
+    console.log('✅ Connected to MCP server');
+    console.log(`💼 Test wallet address: ${wallet.address}`);
+    console.log(`💰 Payment recipient: ${payToAddress}`);
+  });
+
+  afterAll(async () => {
+    if (client) {
+      await client.close();
+      console.log('\n👋 Disconnected from MCP server');
+    }
+  });
+
+  describe('Basic Deployment', () => {
+    it('should compile and deploy a simple contract with payment', async () => {
+      console.log('\n🔧 Test: Deploying SimpleStorage contract...');
+
+      const soliditySources = {
+        "SimpleStorage.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleStorage {
+    uint256 private value;
+
+    event ValueChanged(uint256 newValue);
+
+    constructor(uint256 initialValue) {
+        value = initialValue;
+    }
+
+    function set(uint256 _value) public {
+        value = _value;
+        emit ValueChanged(_value);
+    }
+
+    function get() public view returns (uint256) {
+        return value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const compilerSettings = {
+        optimizer: {
+          enabled: true,
+          runs: 200
+        },
+        evmVersion: "london"
+      };
+
+      // Call compile_and_deploy tool - payment should be handled automatically
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "SimpleStorage",
+          contractFile: "SimpleStorage.sol",
+          constructorArgs: [42],
+          settings: compilerSettings,
+          network: "base-sepolia"
+        }
+      });
+
+      console.log('📦 Received deployment result');
+
+      // Parse the result
+      expect(result).toBeDefined();
+      expect(result.content).toBeDefined();
+      expect(Array.isArray(result.content)).toBe(true);
+      expect(result.content.length).toBeGreaterThan(0);
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      // Verify deployment was successful
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.compilation).toBeDefined();
+      expect(deploymentResult.deployment).toBeDefined();
+      expect(deploymentResult.abi).toBeDefined();
+
+      // Verify compiler settings that were used (should match the provided settings)
+      expect(deploymentResult.compilation.settings).toBeDefined();
+      expect(deploymentResult.compilation.settings.optimizer.enabled).toBe(true);
+      expect(deploymentResult.compilation.settings.optimizer.runs).toBe(200);
+      expect(deploymentResult.compilation.settings.evmVersion).toBe('london');
+
+      // Verify deployment details
+      expect(deploymentResult.deployment.success).toBe(true);
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+      expect(deploymentResult.deployment.transactionHash).toBeTruthy();
+      expect(deploymentResult.deployment.blockNumber).toBeTruthy();
+      expect(deploymentResult.deployment.gasUsed).toBeTruthy();
+      expect(deploymentResult.deployment.network).toBe('base-sepolia');
+      expect(deploymentResult.deployment.deployedBy).toBe('server-delegated-deployer');
+      expect(deploymentResult.deployment.deployerAddress).toBeTruthy();
+
+      // Verify deployer address matches the expected server deployer address from environment
+      expect(deploymentResult.deployment.deployerAddress).toBe(expectedDeployerAddress);
+      console.log(`   ✅ Deployer address verified: ${expectedDeployerAddress}`);
+
+      // Verify ABI is present and valid
+      expect(Array.isArray(deploymentResult.abi)).toBe(true);
+      expect(deploymentResult.abi.length).toBeGreaterThan(0);
+
+      // Verify contract exists on-chain by reading the constructor value
+      const contractValue = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function get() view returns (uint256)']),
+        functionName: 'get',
+      });
+
+      expect(contractValue).toBe(42n);
+      console.log(`   ✅ Contract verified on-chain with constructor value: ${contractValue}`);
+    }, 60000); // 60 second timeout for deployment
+
+    it('should compile and deploy contract with custom compiler settings', async () => {
+      console.log('\n🔧 Test: Deploying with custom compiler settings...');
+
+      const soliditySources = {
+        "Counter.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Counter {
+    uint256 public count;
+
+    constructor() {
+        count = 0;
+    }
+
+    function increment() public {
+        count += 1;
+    }
+
+    function decrement() public {
+        require(count > 0, "Counter: cannot decrement below zero");
+        count -= 1;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const compilerSettings = {
+        optimizer: {
+          enabled: false,
+          runs: 100
+        },
+        evmVersion: "paris"
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "Counter",
+          contractFile: "Counter.sol",
+          settings: compilerSettings,
+          network: "base-sepolia"
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.deployment.success).toBe(true);
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+
+      // Verify compilation with custom compiler settings
+      expect(deploymentResult.compilation).toBeDefined();
+      expect(deploymentResult.compilation.settings).toBeDefined();
+
+      // Verify the custom compiler settings were actually used
+      expect(deploymentResult.compilation.settings.optimizer.enabled).toBe(false);
+      expect(deploymentResult.compilation.settings.optimizer.runs).toBe(100);
+      expect(deploymentResult.compilation.settings.evmVersion).toBe('paris');
+
+      // Verify deployment details
+      expect(deploymentResult.deployment.network).toBe('base-sepolia');
+      expect(deploymentResult.deployment.deployedBy).toBe('server-delegated-deployer');
+
+      // Verify deployer address matches the expected server deployer address
+      expect(deploymentResult.deployment.deployerAddress).toBe(expectedDeployerAddress);
+      console.log(`   ✅ Deployer address verified with custom settings: ${expectedDeployerAddress}`);
+      console.log(`   ✅ Custom compiler settings verified: optimizer disabled, runs: 100, evmVersion: paris`);
+
+      // Verify contract on-chain
+      const contractCount = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function count() view returns (uint256)']),
+        functionName: 'count',
+      });
+
+      expect(contractCount).toBe(0n);
+      console.log(`   ✅ Counter contract deployed with initial count: ${contractCount}`);
+    }, 60000);
+  });
+
+  describe('Deployment with Post-Deployment Call', () => {
+    it('should deploy and call a method successfully', async () => {
+      console.log('\n🔧 Test: Deploying and calling set method...');
+
+      const soliditySources = {
+        "SimpleStorage.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleStorage {
+    uint256 private value;
+
+    event ValueChanged(uint256 newValue);
+
+    constructor(uint256 initialValue) {
+        value = initialValue;
+    }
+
+    function set(uint256 _value) public {
+        value = _value;
+        emit ValueChanged(_value);
+    }
+
+    function get() public view returns (uint256) {
+        return value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "SimpleStorage",
+          contractFile: "SimpleStorage.sol",
+          constructorArgs: [42],
+          settings: {
+            optimizer: { enabled: true, runs: 200 },
+            evmVersion: "london"
+          },
+          network: "base-sepolia",
+          postDeploymentCall: {
+            methodName: "set",
+            methodArgs: [100]
+          }
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      // Verify deployment success
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.deployment.success).toBe(true);
+
+      // Verify post-deployment call success
+      expect(deploymentResult.postDeploymentCall).toBeDefined();
+      expect(deploymentResult.postDeploymentCall.success).toBe(true);
+      expect(deploymentResult.postDeploymentCall.methodName).toBe('set');
+      expect(deploymentResult.postDeploymentCall.methodArgs).toEqual([100]);
+      expect(deploymentResult.postDeploymentCall.transactionHash).toBeTruthy();
+      expect(deploymentResult.postDeploymentCall.blockNumber).toBeTruthy();
+      expect(deploymentResult.postDeploymentCall.gasUsed).toBeTruthy();
+
+      console.log(`   ✅ Contract deployed at: ${deploymentResult.deployment.contractAddress}`);
+      console.log(`   ✅ Method called: ${deploymentResult.postDeploymentCall.methodName}`);
+
+      // Verify the value was set correctly on-chain
+      const contractValue = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function get() view returns (uint256)']),
+        functionName: 'get',
+      });
+
+      expect(contractValue).toBe(100n);
+      console.log(`   ✅ Value verified on-chain: ${contractValue}`);
+    }, 90000); // 90 second timeout for deployment + method call
+
+    it('should deploy contract with payable method call', async () => {
+      console.log('\n🔧 Test: Deploying and calling increment method...');
+
+      const soliditySources = {
+        "Counter.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Counter {
+    uint256 public count;
+
+    constructor() {
+        count = 0;
+    }
+
+    function increment() public {
+        count += 1;
+    }
+
+    function incrementBy(uint256 amount) public {
+        count += amount;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "Counter",
+          contractFile: "Counter.sol",
+          network: "base-sepolia",
+          postDeploymentCall: {
+            methodName: "incrementBy",
+            methodArgs: [5]
+          }
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.postDeploymentCall.success).toBe(true);
+
+      // Verify the count was incremented
+      const contractCount = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function count() view returns (uint256)']),
+        functionName: 'count',
+      });
+
+      expect(contractCount).toBe(5n);
+      console.log(`   ✅ Counter incremented to: ${contractCount}`);
+    }, 90000);
+  });
+
+  describe('Multi-Contract Deployment', () => {
+    it('should deploy contract with dependencies', async () => {
+      console.log('\n🔧 Test: Deploying contract with library...');
+
+      const soliditySources = {
+        "Main.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./Library.sol";
+
+contract Main {
+    using MathLib for uint256;
+
+    uint256 public result;
+
+    constructor(uint256 a, uint256 b) {
+        result = a.add(b);
+    }
+
+    function addNumbers(uint256 a, uint256 b) public returns (uint256) {
+        result = a.add(b);
+        return result;
+    }
+}
+          `.trim()
+        },
+        "Library.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+library MathLib {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "Main",
+          contractFile: "Main.sol",
+          constructorArgs: [10, 20],
+          settings: {
+            optimizer: { enabled: true, runs: 200 }
+          },
+          network: "base-sepolia"
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+
+      // Verify the constructor calculation was correct
+      const contractResult = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function result() view returns (uint256)']),
+        functionName: 'result',
+      });
+
+      expect(contractResult).toBe(30n);
+      console.log(`   ✅ Contract with library deployed, result: ${contractResult}`);
+    }, 60000);
+  });
+
+  describe('Payment Verification', () => {
+    it('should verify payment was made by checking balance changes', async () => {
+      console.log('\n🔧 Test: Verifying payment through balance check...');
+
+      if (!payToAddress) {
+        console.log('⚠️  PAY_TO_ADDRESS not set, skipping balance verification');
+        return;
+      }
+
+      // Wait to ensure any pending transactions from previous tests have settled
+      console.log('⏳ Waiting for any pending transactions to settle...');
+      await new Promise(resolve => setTimeout(resolve, 15000));
+
+      // Get baseline balance
+      const baselineBalance = await getUSDCBalance(payToAddress);
+      console.log(`💰 Baseline balance: ${baselineBalance} USDC`);
+
+      const soliditySources = {
+        "PaymentTest.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract PaymentTest {
+    uint256 public value = 42;
+}
+          `.trim()
+        }
+      };
+
+      // Deploy - this should trigger payment
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "PaymentTest",
+          contractFile: "PaymentTest.sol",
+          network: "base-sepolia"
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+      expect(deploymentResult.success).toBe(true);
+
+      // Wait for blockchain transaction to be confirmed
+      console.log('⏳ Waiting for payment transaction to be confirmed...');
+      await new Promise(resolve => setTimeout(resolve, 10000));
+
+      // Get final balance
+      const finalBalance = await getUSDCBalance(payToAddress);
+
+      // Verify that payment was made (balance increased)
+      expect(finalBalance).toBeGreaterThan(baselineBalance);
+      const paymentAmount = finalBalance - baselineBalance;
+
+      // Verify the payment amount matches expected deployment cost
+      expect(paymentAmount).toBe(EXPECTED_DEPLOYMENT_COST);
+
+      console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC`);
+    }, 60000);
+  });
+
+  describe('Error Handling', () => {
+    it('should handle compilation errors gracefully', async () => {
+      console.log('\n🔧 Test: Handling compilation errors...');
+
+      const soliditySources = {
+        "Broken.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Broken {
+    // Syntax error: missing semicolon
+    uint256 public value
+
+    function setValue(uint256 _value) public {
+        value = _value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "Broken",
+          contractFile: "Broken.sol",
+          network: "base-sepolia"
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      // Should return a result even with errors
+      expect(deploymentResult).toBeDefined();
+      expect(deploymentResult.success).toBe(false);
+      expect(deploymentResult.error).toBeDefined();
+
+      console.log('✅ Compilation errors handled correctly!');
+    }, 30000);
+
+    it('should handle invalid constructor arguments', async () => {
+      console.log('\n🔧 Test: Handling invalid constructor arguments...');
+
+      const soliditySources = {
+        "SimpleStorage.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleStorage {
+    uint256 private value;
+
+    constructor(uint256 initialValue) {
+        value = initialValue;
+    }
+
+    function get() public view returns (uint256) {
+        return value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "SimpleStorage",
+          contractFile: "SimpleStorage.sol",
+          constructorArgs: [], // Missing required argument
+          network: "base-sepolia"
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult).toBeDefined();
+      expect(deploymentResult.success).toBe(false);
+
+      console.log('✅ Invalid constructor arguments handled correctly!');
+    }, 30000);
+  });
+});
