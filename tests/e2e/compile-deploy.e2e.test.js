@@ -810,5 +810,137 @@ contract SimpleStorage {
 
       console.log('✅ Invalid constructor arguments handled correctly!');
     }, 30000);
+
+    it('should handle non-existent post-deployment method gracefully', async () => {
+      console.log('\n🔧 Test: Handling non-existent post-deployment method...');
+
+      const soliditySources = {
+        "SimpleStorage.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleStorage {
+    uint256 private value;
+
+    constructor(uint256 initialValue) {
+        value = initialValue;
+    }
+
+    function get() public view returns (uint256) {
+        return value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "SimpleStorage",
+          contractFile: "SimpleStorage.sol",
+          constructorArgs: [42],
+          network: "base-sepolia",
+          postDeploymentCall: {
+            methodName: "nonExistentMethod", // This method doesn't exist
+            methodArgs: [100]
+          }
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      // Deployment should succeed
+      expect(deploymentResult).toBeDefined();
+      expect(deploymentResult.deployment).toBeDefined();
+      expect(deploymentResult.deployment.success).toBe(true);
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+
+      // But overall success should be false due to method call failure
+      expect(deploymentResult.success).toBe(false);
+
+      // Post-deployment call should have failed
+      expect(deploymentResult.postDeploymentCall).toBeDefined();
+      expect(deploymentResult.postDeploymentCall.success).toBe(false);
+      expect(deploymentResult.postDeploymentCall.error).toBeDefined();
+      expect(deploymentResult.postDeploymentCall.methodName).toBe('nonExistentMethod');
+
+      // Error should be deterministic - viem returns "not found" for non-existent functions
+      expect(deploymentResult.postDeploymentCall.error.toLowerCase()).toContain('not found');
+
+      console.log(`✅ Non-existent method error handled correctly: ${deploymentResult.postDeploymentCall.error}`);
+      console.log(`✅ Contract was deployed at: ${deploymentResult.deployment.contractAddress}`);
+      console.log('✅ Overall operation marked as failed');
+    }, 90000);
+
+    it('should handle invalid post-deployment method arguments gracefully', async () => {
+      console.log('\n🔧 Test: Handling invalid post-deployment method arguments...');
+
+      const soliditySources = {
+        "SimpleStorage.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleStorage {
+    uint256 private value;
+
+    constructor(uint256 initialValue) {
+        value = initialValue;
+    }
+
+    function set(uint256 _value) public {
+        value = _value;
+    }
+
+    function get() public view returns (uint256) {
+        return value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "SimpleStorage",
+          contractFile: "SimpleStorage.sol",
+          constructorArgs: [42],
+          network: "base-sepolia",
+          postDeploymentCall: {
+            methodName: "set",
+            methodArgs: [] // Missing required argument (should be a uint256)
+          }
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      // Deployment should succeed
+      expect(deploymentResult).toBeDefined();
+      expect(deploymentResult.deployment).toBeDefined();
+      expect(deploymentResult.deployment.success).toBe(true);
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+
+      // But overall success should be false due to method call failure
+      expect(deploymentResult.success).toBe(false);
+
+      // Post-deployment call should have failed
+      expect(deploymentResult.postDeploymentCall).toBeDefined();
+      expect(deploymentResult.postDeploymentCall.success).toBe(false);
+      expect(deploymentResult.postDeploymentCall.error).toBeDefined();
+      expect(deploymentResult.postDeploymentCall.methodName).toBe('set');
+
+      // Error should be deterministic - viem returns "mismatch" for wrong argument count
+      expect(deploymentResult.postDeploymentCall.error.toLowerCase()).toContain('mismatch');
+
+      console.log(`✅ Invalid arguments error handled correctly: ${deploymentResult.postDeploymentCall.error}`);
+      console.log(`✅ Contract was deployed at: ${deploymentResult.deployment.contractAddress}`);
+      console.log('✅ Overall operation marked as failed');
+    }, 90000);
   });
 });
