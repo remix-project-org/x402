@@ -336,8 +336,8 @@ contract SimpleStorage {
       console.log(`   ✅ Value verified on-chain: ${contractValue}`);
     }, 90000); // 90 second timeout for deployment + method call
 
-    it('should deploy contract with payable method call', async () => {
-      console.log('\n🔧 Test: Deploying and calling increment method...');
+    it('should deploy and call method after deployment', async () => {
+      console.log('\n🔧 Test: Deploying and calling incrementBy method...');
 
       const soliditySources = {
         "Counter.sol": {
@@ -392,6 +392,113 @@ contract Counter {
 
       expect(contractCount).toBe(5n);
       console.log(`   ✅ Counter incremented to: ${contractCount}`);
+    }, 90000);
+
+    it('should deploy and call payable method with value', async () => {
+      console.log('\n🔧 Test: Deploying and calling payable method with value...');
+
+      const soliditySources = {
+        "PayableReceiver.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract PayableReceiver {
+    uint256 public totalReceived;
+    uint256 public lastPayment;
+    address public lastSender;
+
+    event PaymentReceived(address sender, uint256 amount);
+
+    constructor() {
+        totalReceived = 0;
+    }
+
+    function receivePayment() public payable {
+        require(msg.value > 0, "Must send some value");
+        totalReceived += msg.value;
+        lastPayment = msg.value;
+        lastSender = msg.sender;
+        emit PaymentReceived(msg.sender, msg.value);
+    }
+
+    function getBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const paymentValue = 50000000000000n; // 0.00005 ETH in wei
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "PayableReceiver",
+          contractFile: "PayableReceiver.sol",
+          network: "base-sepolia",
+          postDeploymentCall: {
+            methodName: "receivePayment",
+            methodArgs: [],
+            value: paymentValue.toString() // Send value with method call
+          }
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.postDeploymentCall.success).toBe(true);
+
+      console.log(`   ✅ Contract deployed at: ${deploymentResult.deployment.contractAddress}`);
+      console.log(`   ✅ Payable method called with value: ${paymentValue} wei`);
+
+      // Wait a bit for the transaction to be fully confirmed
+      console.log('⏳ Waiting for transaction to be fully propagated...');
+      await new Promise(resolve => setTimeout(resolve, 10000));
+
+      console.log(`   📍 Reading from contract: ${deploymentResult.deployment.contractAddress}`);
+
+      // Verify the contract received the payment
+      const contractBalance = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function getBalance() view returns (uint256)']),
+        functionName: 'getBalance',
+      });
+
+      expect(contractBalance).toBe(paymentValue);
+      console.log(`   ✅ Contract balance verified: ${contractBalance} wei`);
+
+      // Verify the total received was tracked
+      const totalReceived = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function totalReceived() view returns (uint256)']),
+        functionName: 'totalReceived',
+      });
+
+      expect(totalReceived).toBe(paymentValue);
+      console.log(`   ✅ Total received verified: ${totalReceived} wei`);
+
+      // Verify the last payment amount
+      const lastPayment = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function lastPayment() view returns (uint256)']),
+        functionName: 'lastPayment',
+      });
+
+      expect(lastPayment).toBe(paymentValue);
+      console.log(`   ✅ Last payment verified: ${lastPayment} wei`);
+
+      // Verify the value was actually sent by checking the transaction details
+      const methodCallTx = await publicClient.getTransaction({
+        hash: deploymentResult.postDeploymentCall.transactionHash,
+      });
+
+      expect(methodCallTx.value).toBe(paymentValue);
+      console.log(`   ✅ Transaction value verified from blockchain: ${methodCallTx.value} wei`);
+      console.log(`   ✅ X402 fee included the method call value in cost calculation`);
     }, 90000);
   });
 
@@ -527,6 +634,95 @@ contract PaymentTest {
       expect(paymentAmount).toBe(EXPECTED_DEPLOYMENT_COST);
 
       console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC`);
+    }, 60000);
+  });
+
+  describe('Deployment with Value', () => {
+    it('should deploy a payable constructor with value and include it in x402 fee', async () => {
+      console.log('\n🔧 Test: Deploying contract with value (payable constructor)...');
+
+      const soliditySources = {
+        "PayableContract.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract PayableContract {
+    uint256 public deploymentValue;
+    address public owner;
+
+    constructor() payable {
+        deploymentValue = msg.value;
+        owner = msg.sender;
+    }
+
+    function getBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const deploymentValue = 100000000000000n; // 0.0001 ETH in wei
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "PayableContract",
+          contractFile: "PayableContract.sol",
+          settings: {
+            optimizer: { enabled: true, runs: 200 },
+            evmVersion: "london"
+          },
+          network: "base-sepolia",
+          value: deploymentValue.toString() // Send value with deployment
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      // Verify deployment success
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.deployment.success).toBe(true);
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+
+      console.log(`   ✅ Contract deployed at: ${deploymentResult.deployment.contractAddress}`);
+      console.log(`   ✅ Value sent: ${deploymentValue} wei`);
+
+      // Wait a bit for the transaction to be fully confirmed
+      console.log('⏳ Waiting for transaction to be fully propagated...');
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
+      // Verify the contract received the value
+      const contractBalance = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function getBalance() view returns (uint256)']),
+        functionName: 'getBalance',
+      });
+
+      expect(contractBalance).toBe(deploymentValue);
+      console.log(`   ✅ Contract balance verified: ${contractBalance} wei`);
+
+      // Verify the deployment value was recorded
+      const deploymentValueStored = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: parseAbi(['function deploymentValue() view returns (uint256)']),
+        functionName: 'deploymentValue',
+      });
+
+      expect(deploymentValueStored).toBe(deploymentValue);
+      console.log(`   ✅ Deployment value stored: ${deploymentValueStored} wei`);
+
+      // Verify the value was actually sent by checking the transaction details
+      const deploymentTx = await publicClient.getTransaction({
+        hash: deploymentResult.deployment.transactionHash,
+      });
+
+      expect(deploymentTx.value).toBe(deploymentValue);
+      console.log(`   ✅ Transaction value verified from blockchain: ${deploymentTx.value} wei`);
+      console.log(`   ✅ X402 fee included the deployment value in cost calculation`);
     }, 60000);
   });
 
