@@ -40,9 +40,11 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       evmVersion: z.string().optional()
     }).optional().describe("Optional compiler settings"),
     network: z.string().describe("Network to deploy to (e.g., 'base-sepolia', 'sepolia', 'polygon', 'arbitrum', etc. - any network supported by viem/chains)"),
+    value: z.string().optional().describe("Optional value in wei to send with the deployment transaction (for payable constructors)"),
     postDeploymentCall: z.object({
       methodName: z.string().describe("Name of the method to call after deployment"),
-      methodArgs: z.array(z.any()).optional().describe("Arguments to pass to the method")
+      methodArgs: z.array(z.any()).optional().describe("Arguments to pass to the method"),
+      value: z.string().optional().describe("Optional value in wei to send with the method call (for payable methods)")
     }).optional().describe("Optional method to call immediately after deployment")
   }),
   execute: withX402Payment({
@@ -128,7 +130,8 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
 
         const deployGasEstimate = await publicClient.estimateGas({
           account,
-          data: deploymentData
+          data: deploymentData,
+          value: args.value ? BigInt(args.value) : undefined
         });
 
         console.log(`   Deployment Gas Estimate: ${deployGasEstimate}`);
@@ -160,7 +163,8 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
               abi,
               functionName: args.postDeploymentCall.methodName,
               args: args.postDeploymentCall.methodArgs || [],
-              account
+              account,
+              value: args.postDeploymentCall.value ? BigInt(args.postDeploymentCall.value) : undefined
             });
 
             totalGasEstimate = totalGasEstimate + methodCallEstimate;
@@ -184,22 +188,39 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         const gasCostWei = (totalGasEstimate * gasPrice * BigInt(120)) / BigInt(100);
         console.log(`   Estimated Cost (with 20% buffer): ${gasCostWei} wei`);
 
+        // Add the value being sent if any (deployment value + post-deployment call value)
+        const deploymentValueWei = args.value ? BigInt(args.value) : BigInt(0);
+        const postCallValueWei = args.postDeploymentCall?.value ? BigInt(args.postDeploymentCall.value) : BigInt(0);
+        const totalValueWei = deploymentValueWei + postCallValueWei;
+        const totalCostWei = gasCostWei + totalValueWei;
+
+        if (deploymentValueWei > BigInt(0)) {
+          console.log(`   Deployment value: ${deploymentValueWei} wei`);
+        }
+        if (postCallValueWei > BigInt(0)) {
+          console.log(`   Post-deployment call value: ${postCallValueWei} wei`);
+        }
+        if (totalValueWei > BigInt(0)) {
+          console.log(`   Total value being sent: ${totalValueWei} wei`);
+        }
+        console.log(`   Total Cost (gas + value): ${totalCostWei} wei`);
+
         // Convert to USD (using conservative ETH price estimate)
         const ethUsdPrice = 3000;
-        const gasCostEth = Number(gasCostWei) / 1e18;
-        const gasCostUsd = gasCostEth * ethUsdPrice;
+        const totalCostEth = Number(totalCostWei) / 1e18;
+        const totalCostUsd = totalCostEth * ethUsdPrice;
 
-        // Add 30% service fee on gas cost
-        const serviceFee = gasCostUsd * 0.3;
-        const gasWithServiceFee = gasCostUsd + serviceFee;
+        // Add 30% service fee on total cost (gas + value)
+        const serviceFee = totalCostUsd * 0.3;
+        const totalWithServiceFee = totalCostUsd + serviceFee;
 
         // Add base service fee of 0.05 USDC
         const baseFee = 0.05;
-        const finalCostUsd = gasWithServiceFee + baseFee;
+        const finalCostUsd = totalWithServiceFee + baseFee;
         const usdcAmount = Math.ceil(finalCostUsd * 1_000_000).toString();
 
-        console.log(`   Gas Cost: $${gasCostUsd.toFixed(6)} USD`);
-        console.log(`   Service Fee (30% of gas): $${serviceFee.toFixed(6)} USD`);
+        console.log(`   Total Cost (gas + value): $${totalCostUsd.toFixed(6)} USD`);
+        console.log(`   Service Fee (30% of total): $${serviceFee.toFixed(6)} USD`);
         console.log(`   Base Service Fee: $${baseFee.toFixed(6)} USD`);
         console.log(`   Total Cost: $${finalCostUsd.toFixed(6)} USD`);
         console.log(`   USDC Amount: ${usdcAmount} (${finalCostUsd.toFixed(6)} USDC)`);
@@ -207,7 +228,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         return createPaymentRequirements(
           "compile_and_deploy",
           usdcAmount,
-          `Payment for deployment of ${args.contractName}${args.postDeploymentCall ? ` and calling ${args.postDeploymentCall.methodName}` : ''} (estimated gas: ${totalGasEstimate}, cost: ${finalCostUsd.toFixed(6)} USDC)`
+          `Payment for deployment of ${args.contractName}${args.value ? ` with ${args.value} wei` : ''}${args.postDeploymentCall ? ` and calling ${args.postDeploymentCall.methodName}${args.postDeploymentCall.value ? ` with ${args.postDeploymentCall.value} wei` : ''}` : ''} (estimated gas: ${totalGasEstimate}, cost: ${finalCostUsd.toFixed(6)} USDC)`
         );
 
       } catch (error: any) {
@@ -231,9 +252,11 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
     constructorArgs?: any[],
     settings?: any,
     network: string,
+    value?: string,
     postDeploymentCall?: {
       methodName: string,
-      methodArgs?: any[]
+      methodArgs?: any[],
+      value?: string
     }
   }, _context: any) => {
     try {
@@ -345,6 +368,9 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
 
       console.log(`🚀 Deploying contract using server's delegated deployer...`);
       console.log(`   Deployer address: ${deployerAccount.address}`);
+      if (args.value) {
+        console.log(`   Value to send: ${args.value} wei`);
+      }
 
       // Deploy contract
       const hash = await walletClient.deployContract({
@@ -353,6 +379,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         args: args.constructorArgs || [],
         account: deployerAccount,
         chain,
+        value: args.value ? BigInt(args.value) : undefined
       });
 
       console.log(`📡 Transaction sent: ${hash}`);
@@ -369,7 +396,14 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       const result: any = {
         success: true,
         compilation: {
-          warnings: compilationResult.errors || []
+          warnings: compilationResult.errors || [],
+          settings: {
+            optimizer: {
+              enabled: args.settings?.optimizer?.enabled ?? true,
+              runs: args.settings?.optimizer?.runs ?? 200
+            },
+            evmVersion: args.settings?.evmVersion ?? "london"
+          }
         },
         deployment: {
           success: true,
@@ -388,8 +422,15 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       // Step 4: Call post-deployment method if specified
       if (args.postDeploymentCall && receipt.contractAddress) {
         console.log(`🔧 Calling post-deployment method: ${args.postDeploymentCall.methodName}`);
+        if (args.postDeploymentCall.value) {
+          console.log(`   Value to send: ${args.postDeploymentCall.value} wei`);
+        }
 
         try {
+          // Use a conservative gas limit for post-deployment calls (200k should be plenty)
+          const gasLimit = BigInt(200000);
+          console.log(`   Using gas limit: ${gasLimit}`);
+
           const callHash = await walletClient.writeContract({
             address: receipt.contractAddress,
             abi,
@@ -397,6 +438,8 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
             args: args.postDeploymentCall.methodArgs || [],
             account: deployerAccount,
             chain,
+            value: args.postDeploymentCall.value ? BigInt(args.postDeploymentCall.value) : undefined,
+            gas: gasLimit
           });
 
           console.log(`📡 Method call transaction sent: ${callHash}`);
