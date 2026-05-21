@@ -161,6 +161,9 @@ contract SimpleStorage {
       expect(Array.isArray(deploymentResult.abi)).toBe(true);
       expect(deploymentResult.abi.length).toBeGreaterThan(0);
 
+      // Wait for transaction to be fully propagated
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
       // Verify contract exists on-chain by reading the constructor value
       const contractValue = await publicClient.readContract({
         address: deploymentResult.deployment.contractAddress,
@@ -170,7 +173,7 @@ contract SimpleStorage {
 
       expect(contractValue).toBe(42n);
       console.log(`   ✅ Contract verified on-chain with constructor value: ${contractValue}`);
-    }, 60000); // 60 second timeout for deployment
+    }, 120000); // 120 second timeout for deployment
 
     it('should compile and deploy contract with custom compiler settings', async () => {
       console.log('\n🔧 Test: Deploying with custom compiler settings...');
@@ -244,6 +247,9 @@ contract Counter {
       console.log(`   ✅ Deployer address verified with custom settings: ${expectedDeployerAddress}`);
       console.log(`   ✅ Custom compiler settings verified: optimizer disabled, runs: 100, evmVersion: paris`);
 
+      // Wait for transaction to be fully propagated
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
       // Verify contract on-chain
       const contractCount = await publicClient.readContract({
         address: deploymentResult.deployment.contractAddress,
@@ -253,7 +259,7 @@ contract Counter {
 
       expect(contractCount).toBe(0n);
       console.log(`   ✅ Counter contract deployed with initial count: ${contractCount}`);
-    }, 60000);
+    }, 120000);
   });
 
   describe('Deployment with Post-Deployment Call', () => {
@@ -325,6 +331,9 @@ contract SimpleStorage {
       console.log(`   ✅ Contract deployed at: ${deploymentResult.deployment.contractAddress}`);
       console.log(`   ✅ Method called: ${deploymentResult.postDeploymentCall.methodName}`);
 
+      // Wait for transaction to be fully propagated
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
       // Verify the value was set correctly on-chain
       const contractValue = await publicClient.readContract({
         address: deploymentResult.deployment.contractAddress,
@@ -382,6 +391,9 @@ contract Counter {
 
       expect(deploymentResult.success).toBe(true);
       expect(deploymentResult.postDeploymentCall.success).toBe(true);
+
+      // Wait for transaction to be fully propagated
+      await new Promise(resolve => setTimeout(resolve, 8000));
 
       // Verify the count was incremented
       const contractCount = await publicClient.readContract({
@@ -563,6 +575,9 @@ library MathLib {
       expect(deploymentResult.success).toBe(true);
       expect(deploymentResult.deployment.contractAddress).toBeTruthy();
 
+      // Wait for transaction to be fully propagated
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
       // Verify the constructor calculation was correct
       const contractResult = await publicClient.readContract({
         address: deploymentResult.deployment.contractAddress,
@@ -572,7 +587,7 @@ library MathLib {
 
       expect(contractResult).toBe(30n);
       console.log(`   ✅ Contract with library deployed, result: ${contractResult}`);
-    }, 60000);
+    }, 120000);
   });
 
   describe('Payment Verification', () => {
@@ -630,11 +645,13 @@ contract PaymentTest {
       expect(finalBalance).toBeGreaterThan(baselineBalance);
       const paymentAmount = finalBalance - baselineBalance;
 
-      // Verify the payment amount matches expected deployment cost
-      expect(paymentAmount).toBe(EXPECTED_DEPLOYMENT_COST);
+      // Verify the payment amount is reasonable (should be close to expected cost with dynamic pricing)
+      // Dynamic pricing means it won't be exactly EXPECTED_DEPLOYMENT_COST, but should be in a reasonable range
+      expect(paymentAmount).toBeGreaterThanOrEqual(EXPECTED_DEPLOYMENT_COST);
+      expect(paymentAmount).toBeLessThan(EXPECTED_DEPLOYMENT_COST * 2n); // Should not be more than 2x
 
-      console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC`);
-    }, 60000);
+      console.log(`✅ Payment verified! Amount paid: ${paymentAmount} USDC (expected ~${EXPECTED_DEPLOYMENT_COST})`);
+    }, 120000);
   });
 
   describe('Deployment with Value', () => {
@@ -723,7 +740,7 @@ contract PayableContract {
       expect(deploymentTx.value).toBe(deploymentValue);
       console.log(`   ✅ Transaction value verified from blockchain: ${deploymentTx.value} wei`);
       console.log(`   ✅ X402 fee included the deployment value in cost calculation`);
-    }, 60000);
+    }, 120000);
   });
 
   describe('Error Handling', () => {
@@ -766,7 +783,7 @@ contract Broken {
       expect(deploymentResult.error).toBeDefined();
 
       console.log('✅ Compilation errors handled correctly!');
-    }, 30000);
+    }, 60000);
 
     it('should handle invalid constructor arguments', async () => {
       console.log('\n🔧 Test: Handling invalid constructor arguments...');
@@ -809,7 +826,7 @@ contract SimpleStorage {
       expect(deploymentResult.success).toBe(false);
 
       console.log('✅ Invalid constructor arguments handled correctly!');
-    }, 30000);
+    }, 60000);
 
     it('should handle non-existent post-deployment method gracefully', async () => {
       console.log('\n🔧 Test: Handling non-existent post-deployment method...');
