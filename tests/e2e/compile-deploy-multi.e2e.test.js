@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from '@jest/globals';
+import { describe, expect, it, beforeAll, afterAll, afterEach } from '@jest/globals';
 import { createMCPClient } from '../../src/lib/index.js';
 import { createPublicClient, http, parseAbi } from 'viem';
 import { baseSepolia, sepolia } from 'viem/chains';
@@ -43,6 +43,13 @@ describe('Multi-Network Deployment E2E Tests', () => {
     console.log('✅ Connected to MCP server');
     console.log(`💼 Test wallet address: ${wallet.address}`);
     console.log(`💰 Payment recipient: ${payToAddress}`);
+  });
+
+  afterEach(async () => {
+    // Wait between tests to allow blockchain transactions to settle
+    // This prevents nonce conflicts in CI when tests run in quick succession
+    console.log('⏳ Waiting for transactions to settle...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
   });
 
   afterAll(async () => {
