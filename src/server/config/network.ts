@@ -36,6 +36,19 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     },
     usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
   },
+  "sepolia": {
+    name: "sepolia",
+    displayName: "Sepolia Testnet",
+    chainId: 11155111,
+    rpcUrl: process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org",
+    explorerUrl: "https://sepolia.etherscan.io",
+    nativeCurrency: {
+      name: "Ether",
+      symbol: "ETH",
+      decimals: 18,
+    },
+    usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // Sepolia USDC
+  },
   "base": {
     name: "base",
     displayName: "Base Mainnet",
@@ -99,8 +112,16 @@ export function getSupportedNetworks(): string[] {
 
 /**
  * Get RPC URL for a specific network with fallback to default
+ * Returns undefined if network is not in local config (allows viem to use its default RPC)
  */
-export function getRpcUrl(networkName: string): string {
+export function getRpcUrl(networkName: string): string | undefined {
+  // Check if network exists in local config
+  if (!isNetworkSupported(networkName)) {
+    // Network not in local config, return undefined to let viem use its default RPC
+    console.log(`⚠️  Network "${networkName}" not in local config, using viem default RPC`);
+    return undefined;
+  }
+
   const network = getNetworkByName(networkName);
   return network.rpcUrl;
 }
