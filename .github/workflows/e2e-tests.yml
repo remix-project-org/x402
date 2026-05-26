@@ -37,6 +37,7 @@ jobs:
           SERVER_DEPLOYER_PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
           NETWORK=base-sepolia
           BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+          SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
           MCP_SERVER_URL=http://localhost:8000/mcp
           TEST_TIMEOUT=60000
           EOF
@@ -49,6 +50,7 @@ jobs:
           SERVER_DEPLOYER_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           NETWORK: base-sepolia
           BASE_SEPOLIA_RPC_URL: https://sepolia.base.org
+          SEPOLIA_RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
 
       - name: Wait for server to be ready
         run: |
