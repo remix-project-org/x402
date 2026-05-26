@@ -48,8 +48,9 @@ describe('Multi-Network Deployment E2E Tests', () => {
   afterEach(async () => {
     // Wait between tests to allow blockchain transactions to settle
     // This prevents nonce conflicts in CI when tests run in quick succession
+    // Sepolia has slower block times (12s) so we wait longer
     console.log('⏳ Waiting for transactions to settle...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 15000));
   });
 
   afterAll(async () => {
@@ -142,7 +143,7 @@ contract SimpleStorage {
       console.log(`   ✅ Deployed to ${deployment.network} at: ${deployment.contractAddress}`);
 
       // Wait for transaction to be fully propagated
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      await new Promise(resolve => setTimeout(resolve, 15000));
 
       // Verify contract exists on-chain
       const contractValue = await publicClient.readContract({
@@ -229,8 +230,8 @@ contract Counter {
         console.log(`   ✅ Deployed to ${deployment.network} at: ${deployment.contractAddress}`);
       }
 
-      // Wait for transactions to be fully propagated
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      // Wait for transactions to be fully propagated (Sepolia has 12s block times)
+      await new Promise(resolve => setTimeout(resolve, 15000));
 
       // Verify contract on base-sepolia
       const baseSepoliaDeployment = deploymentResult.deployments.find(d => d.network === 'base-sepolia');
@@ -327,8 +328,10 @@ contract Counter {
         console.log(`   ✅ Contract deployed and method called on ${deployment.network}`);
       }
 
-      // Wait for transaction to be fully propagated
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      // Wait for transactions to be fully propagated and confirmed
+      // Sepolia has 12s block times, Base Sepolia has 2s
+      // Wait longer to ensure post-deployment transactions are confirmed
+      await new Promise(resolve => setTimeout(resolve, 20000));
 
       // Verify the count was incremented on base-sepolia
       const baseSepoliaDeployment = deploymentResult.deployments.find(d => d.network === 'base-sepolia');
@@ -579,8 +582,8 @@ library MathLib {
         console.log(`   ✅ ${deployment.network}: ${deployment.contractAddress}`);
       }
 
-      // Wait for transaction to be fully propagated
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      // Wait for transaction to be fully propagated (Sepolia has 12s block times)
+      await new Promise(resolve => setTimeout(resolve, 15000));
 
       // Verify the constructor calculation was correct on base-sepolia
       const baseSepoliaDeployment = deploymentResult.deployments.find(d => d.network === 'base-sepolia');
