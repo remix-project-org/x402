@@ -398,24 +398,21 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
 
                 const callReceipt = await walletClient.waitForTransactionReceipt({ hash: callHash });
 
-                // Check if transaction reverted
-                if (callReceipt.status === 'reverted' || callReceipt.status === 0n) {
-                  console.log(`   ❌ Method call reverted`);
-                  deploymentResult.postDeploymentCall = {
-                    success: false,
-                    methodName: args.postDeploymentCall.methodName,
-                    transactionHash: callHash,
-                    error: 'Transaction reverted'
-                  };
-                } else {
+                // Check if transaction was successful
+                const isSuccess = callReceipt.status === 'success';
+
+                if (isSuccess) {
                   console.log(`   ✅ Method call successful`);
-                  deploymentResult.postDeploymentCall = {
-                    success: true,
-                    methodName: args.postDeploymentCall.methodName,
-                    transactionHash: callHash,
-                    gasUsed: callReceipt.gasUsed.toString()
-                  };
+                } else {
+                  console.log(`   ❌ Method call reverted`);
                 }
+
+                deploymentResult.postDeploymentCall = {
+                  success: isSuccess,
+                  methodName: args.postDeploymentCall.methodName,
+                  transactionHash: callHash,
+                  gasUsed: callReceipt.gasUsed.toString()
+                };
               } catch (callError: any) {
                 console.log(`   ❌ Method call failed: ${callError.message}`);
                 deploymentResult.postDeploymentCall = {
