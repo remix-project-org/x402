@@ -369,7 +369,10 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
             console.log(`   Transaction: ${hash}`);
             console.log(`   Waiting for confirmation...`);
 
-            const receipt = await walletClient.waitForTransactionReceipt({ hash });
+            const receipt = await walletClient.waitForTransactionReceipt({
+              hash,
+              confirmations: 2
+            });
 
             console.log(`   ✅ Deployed at: ${receipt.contractAddress}`);
 
@@ -396,12 +399,29 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
                   chain,
                 });
 
-                const callReceipt = await walletClient.waitForTransactionReceipt({ hash: callHash });
+                const callReceipt = await walletClient.waitForTransactionReceipt({
+                  hash: callHash,
+                  confirmations: 2
+                });
 
-                console.log(`   ✅ Method call successful`);
+                // Check transaction status - viem returns 'success' or 'reverted'
+                console.log(`   📊 Post-deployment call receipt:`, JSON.stringify({
+                  status: callReceipt.status,
+                  blockNumber: callReceipt.blockNumber.toString(),
+                  gasUsed: callReceipt.gasUsed.toString(),
+                  transactionHash: callHash
+                }, null, 2));
+
+                const isSuccess = callReceipt.status === 'success';
+
+                if (isSuccess) {
+                  console.log(`   ✅ Method call successful`);
+                } else {
+                  console.log(`   ❌ Method call reverted with status: ${callReceipt.status}`);
+                }
 
                 deploymentResult.postDeploymentCall = {
-                  success: true,
+                  success: isSuccess,
                   methodName: args.postDeploymentCall.methodName,
                   transactionHash: callHash,
                   blockNumber: callReceipt.blockNumber.toString(),
