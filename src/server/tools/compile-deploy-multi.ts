@@ -404,6 +404,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
                   success: true,
                   methodName: args.postDeploymentCall.methodName,
                   transactionHash: callHash,
+                  blockNumber: callReceipt.blockNumber.toString(),
                   gasUsed: callReceipt.gasUsed.toString(),
                   status: callReceipt.status
                 };

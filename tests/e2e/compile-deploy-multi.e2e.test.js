@@ -331,7 +331,8 @@ contract Counter {
       // Wait for transactions to be fully propagated and confirmed
       // Sepolia has 12s block times, Base Sepolia has 2s
       // Wait longer to ensure post-deployment transactions are confirmed
-      await new Promise(resolve => setTimeout(resolve, 20000));
+      // Increased wait time to account for both networks' block times
+      await new Promise(resolve => setTimeout(resolve, 30000));
 
       // Verify the count was incremented on base-sepolia
       const baseSepoliaDeployment = deploymentResult.deployments.find(d => d.network === 'base-sepolia');
