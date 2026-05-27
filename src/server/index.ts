@@ -6,7 +6,7 @@ import {
   registerCompileAndDeploymentTool,
   registerMultiNetworkDeploymentTool
 } from "./tools/index.js";
-import { getActiveNetwork } from "./config/network.js";
+import { getActiveNetwork, getSupportedNetworks } from "./config/network.js";
 
 // Load environment variables
 dotenv.config();
@@ -48,4 +48,4 @@ console.log("   - compile_solidity (0.01 USDC)");
 console.log("   - analyze_with_slither (0.02 USDC)");
 console.log("   - compile_and_deploy (dynamic pricing based on gas estimation, min 0.05 USDC)");
 console.log("   - compile_and_deploy_multi_network (dynamic pricing for multiple networks)");
-console.log("\n💡 Available networks: base-sepolia, base");
+console.log(`\n💡 Available networks: ${getSupportedNetworks().join(", ")}`);

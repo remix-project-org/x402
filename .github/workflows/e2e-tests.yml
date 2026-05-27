@@ -37,6 +37,7 @@ jobs:
           SERVER_DEPLOYER_PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
           NETWORK=base-sepolia
           BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+          SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
           MCP_SERVER_URL=http://localhost:8000/mcp
           TEST_TIMEOUT=60000
           EOF
@@ -49,6 +50,7 @@ jobs:
           SERVER_DEPLOYER_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           NETWORK: base-sepolia
           BASE_SEPOLIA_RPC_URL: https://sepolia.base.org
+          SEPOLIA_RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
 
       - name: Wait for server to be ready
         run: |
@@ -85,6 +87,14 @@ jobs:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           SERVER_DEPLOYER_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         run: yarn test tests/e2e/compile-deploy.e2e.test.js --testTimeout=120000
+
+      - name: Run E2E Tests (Multi-Network Deploy)
+        env:
+          MCP_SERVER_URL: http://localhost:8000/mcp
+          PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          SERVER_DEPLOYER_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: yarn test tests/e2e/compile-deploy-multi.e2e.test.js --testTimeout=180000
 
       - name: Stop MCP Server
         if: always()
