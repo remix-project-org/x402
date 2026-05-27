@@ -404,20 +404,12 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
                   confirmations: 2
                 });
 
-                // Check transaction status - viem returns 'success' or 'reverted'
-                console.log(`   📊 Post-deployment call receipt:`, JSON.stringify({
-                  status: callReceipt.status,
-                  blockNumber: callReceipt.blockNumber.toString(),
-                  gasUsed: callReceipt.gasUsed.toString(),
-                  transactionHash: callHash
-                }, null, 2));
-
                 const isSuccess = callReceipt.status === 'success';
 
                 if (isSuccess) {
                   console.log(`   ✅ Method call successful`);
                 } else {
-                  console.log(`   ❌ Method call reverted with status: ${callReceipt.status}`);
+                  console.log(`   ❌ Method call reverted`);
                 }
 
                 deploymentResult.postDeploymentCall = {
