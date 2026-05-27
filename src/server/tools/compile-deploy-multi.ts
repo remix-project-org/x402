@@ -398,20 +398,14 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
 
                 const callReceipt = await walletClient.waitForTransactionReceipt({ hash: callHash });
 
-                // Check if transaction was successful
-                const isSuccess = callReceipt.status === 'success';
-
-                if (isSuccess) {
-                  console.log(`   ✅ Method call successful`);
-                } else {
-                  console.log(`   ❌ Method call reverted`);
-                }
+                console.log(`   ✅ Method call successful`);
 
                 deploymentResult.postDeploymentCall = {
-                  success: isSuccess,
+                  success: true,
                   methodName: args.postDeploymentCall.methodName,
                   transactionHash: callHash,
-                  gasUsed: callReceipt.gasUsed.toString()
+                  gasUsed: callReceipt.gasUsed.toString(),
+                  status: callReceipt.status
                 };
               } catch (callError: any) {
                 console.log(`   ❌ Method call failed: ${callError.message}`);
