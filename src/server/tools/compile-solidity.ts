@@ -2,6 +2,7 @@ import { withX402Payment, type FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/s
 import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
+import { TOOL_CONFIG } from "../config/tools.js";
 
 export function registerCompileSolidityTool(mcp: FastMCP) {
   mcp.addTool({
@@ -23,7 +24,7 @@ export function registerCompileSolidityTool(mcp: FastMCP) {
     onExecute: async (_context: { args: unknown }) => {
       return createPaymentRequirements(
         "compile_solidity",
-        "10000", // 0.01 USDC
+        TOOL_CONFIG.payments.compileSolidity,
         "Payment for Solidity compilation"
       );
     },
@@ -39,9 +40,9 @@ export function registerCompileSolidityTool(mcp: FastMCP) {
       // Compile the contracts
       return new Promise((resolve) => {
         // Set compiler options
-        compiler.set("evmVersion", args.settings?.evmVersion ?? "london");
-        compiler.set("optimize", args.settings?.optimizer?.enabled ?? true);
-        compiler.set("runs", args.settings?.optimizer?.runs ?? 200);
+        compiler.set("evmVersion", args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion);
+        compiler.set("optimize", args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled);
+        compiler.set("runs", args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs);
 
         // Register compilation finished event
         compiler.event.register("compilationFinished", (success: boolean, data: any, _source: any) => {
@@ -53,10 +54,10 @@ export function registerCompileSolidityTool(mcp: FastMCP) {
               errors: data.errors?.filter((e: any) => e.severity === "warning") || [],
               settings: {
                 optimizer: {
-                  enabled: args.settings?.optimizer?.enabled ?? true,
-                  runs: args.settings?.optimizer?.runs ?? 200
+                  enabled: args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled,
+                  runs: args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs
                 },
-                evmVersion: args.settings?.evmVersion ?? "london"
+                evmVersion: args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion
               }
             };
             resolve(JSON.stringify(result, null, 2));
@@ -76,7 +77,7 @@ export function registerCompileSolidityTool(mcp: FastMCP) {
         });
 
         // Use loadRemoteVersion for Node.js compatibility (no browser APIs)
-        compiler.loadRemoteVersion("v0.8.26+commit.8a97fa7a");
+        compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
       });
     } catch (error: any) {
       const result = {

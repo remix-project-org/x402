@@ -1,6 +1,7 @@
 import { withX402Payment, type FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/server/fastmcp";
 import { z } from "zod";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
+import { TOOL_CONFIG } from "../config/tools.js";
 
 export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
   mcp.addTool({
@@ -19,7 +20,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
     onExecute: async (_context: { args: unknown }) => {
       return createPaymentRequirements(
         "analyze_with_slither",
-        "20000", // 0.02 USDC
+        TOOL_CONFIG.payments.analyzeWithSlither,
         "Payment for Slither security analysis"
       );
     },
@@ -33,7 +34,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
   }, _context: any) => {
     try {
       // Use Remix Slither API endpoint
-      const SLITHER_API_URL = 'https://mcp.api.remix.live/slither/analyze';
+      const SLITHER_API_URL = TOOL_CONFIG.slither.apiUrl;
 
       // Validate that sources are provided
       const fileEntries = Object.entries(args.sources);
@@ -44,7 +45,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
       // Prepare the request payload in Remix API format with all sources
       const requestPayload: any = {
         sources: args.sources,
-        version: args.version || "0.8.28+commit.7893614a"
+        version: args.version || TOOL_CONFIG.slither.defaultVersion
       };
 
       console.log(`🔍 Sending Slither analysis request to Remix API...`);
@@ -242,7 +243,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
           findings: filteredFindings,
           rawAnalysis: analysisText,
           rawOutput: slitherResult,
-          compilerVersion: args.version || "0.8.28+commit.7893614a"
+          compilerVersion: args.version || TOOL_CONFIG.slither.defaultVersion
         };
 
         console.log(`✅ Slither analysis completed`);
