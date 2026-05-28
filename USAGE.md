@@ -257,11 +257,11 @@ The client automatically handles common errors:
 
 ## Security & Privacy
 
-✅ **You control your keys**: Your private keys never leave your machine
-✅ **Gasless signatures**: Payment authorizations use EIP-3009 (no gas for approval)
-✅ **On-chain verification**: All payments are verified on-chain before service
-✅ **No prepayment**: Pay only when you use tools
-✅ **Transparent pricing**: Costs shown before payment
+✅ **You control your keys**: Your private keys never leave your machine<br/>
+✅ **Gasless signatures**: Payment authorizations use EIP-3009 (no gas for approval)<br/>
+✅ **On-chain verification**: All payments are verified on-chain before service<br/>
+✅ **No prepayment**: Pay only when you use tools<br/>
+✅ **Transparent pricing**: Costs shown before payment<br/>
 
 ## Rate Limits & Fair Use
 
