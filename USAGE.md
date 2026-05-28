@@ -17,7 +17,7 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 
 **What you get:**
 - Full compilation output with bytecode and ABI
-- Multiple Solidity versions supported (default: v0.8.26)
+- Multiple Solidity versions supported (default: v0.8.35)
 - Optimizer settings configurable
 - Detailed error and warning messages
 
@@ -292,7 +292,7 @@ A: The payment is still consumed (gas was used), but you'll receive detailed err
 A: No, payments are final once services are provided. For compilation/analysis, the service is instant. For deployments, gas costs are incurred.
 
 **Q: Which Solidity versions are supported?**
-A: Default is v0.8.26. The Remix compiler supports multiple versions - specify your version in the settings.
+A: Default is v0.8.35. The Remix compiler supports multiple versions - specify your version in the settings.
 
 **Q: Is my code stored on the server?**
 A: No. Code is processed in-memory and not stored. Deployment artifacts may be temporarily cached but are not persisted.
