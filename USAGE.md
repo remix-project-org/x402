@@ -33,9 +33,9 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 - Line-by-line issue reporting
 
 ### 3. Single Network Deployment
-**Tool:** `compile_and_deploy`
-**Price:** Dynamic (gas cost + 30% fee + 0.05 USDC base)
-**Description:** Deploy your smart contracts without sharing your private keys. The server deploys using its own wallet and you pay for the gas + service fee.
+**Tool:** `compile_and_deploy`<br/>
+**Price:** Dynamic (gas cost + 30% fee + 0.05 USDC base)<br/>
+**Description:** Deploy your smart contracts without sharing your private keys. The server deploys using its own wallet and you pay for the gas + service fee.<br/>
 
 **What you get:**
 - Automatic gas estimation before payment
@@ -45,9 +45,9 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 - **Network**: Base Sepolia testnet
 
 ### 4. Multi-Network Deployment
-**Tool:** `compile_and_deploy_multi_network`
-**Price:** Dynamic (total gas across networks + 30% fee + 0.05 USDC base + 10% multi-network buffer)
-**Description:** Deploy the same contract to multiple networks simultaneously.
+**Tool:** `compile_and_deploy_multi_network`<br/>
+**Price:** Dynamic (total gas across networks + 30% fee + 0.05 USDC base + 10% multi-network buffer)<br/>
+**Description:** Deploy the same contract to multiple networks simultaneously.<br/>
 
 **What you get:**
 - Compile once, deploy everywhere
@@ -285,22 +285,22 @@ For testing:
 
 ## FAQ
 
-**Q: What happens if my deployment fails?**
+**Q: What happens if my deployment fails?**<br/>
 A: The payment is still consumed (gas was used), but you'll receive detailed error information to fix the issue.
 
-**Q: Can I get a refund?**
+**Q: Can I get a refund?**<br/>
 A: No, payments are final once services are provided. For compilation/analysis, the service is instant. For deployments, gas costs are incurred.
 
-**Q: Which Solidity versions are supported?**
+**Q: Which Solidity versions are supported?**<br/>
 A: Default is v0.8.35. The Remix compiler supports multiple versions - specify your version in the settings.
 
-**Q: Is my code stored on the server?**
+**Q: Is my code stored on the server?**<br/>
 A: No. Code is processed in-memory and not stored. Deployment artifacts may be temporarily cached but are not persisted.
 
-**Q: How accurate is gas estimation?**
+**Q: How accurate is gas estimation?**<br/>
 A: We use a 120% buffer on gas estimation to ensure transactions succeed. Actual costs may be lower.
 
-**Q: Can I use this in production?**
+**Q: Can I use this in production?**<br/>
 A: Not yet. The server is currently testnet-only. Mainnet support will be announced soon.
 
 ## Testnet Testing Period
@@ -324,6 +324,6 @@ Your feedback helps us improve! Report issues or suggest features on GitHub.
 
 ---
 
-**Happy Building on Testnet! 🧪**
+**Happy Building! 🧪**
 
 Need help? Open an issue on GitHub or check the main README.md for more technical details.
