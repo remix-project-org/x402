@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
 import { getRpcUrl } from "../config/network.js";
+import { TOOL_CONFIG, usdToUsdc } from "../config/tools.js";
 
 // Helper function to dynamically get chain from viem
 async function getChainFromViem(networkName: string): Promise<any> {
@@ -63,9 +64,9 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         });
 
         const compilationResult: any = await new Promise((resolve, reject) => {
-          compiler.set("evmVersion", args.settings?.evmVersion ?? "london");
-          compiler.set("optimize", args.settings?.optimizer?.enabled ?? true);
-          compiler.set("runs", args.settings?.optimizer?.runs ?? 200);
+          compiler.set("evmVersion", args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion);
+          compiler.set("optimize", args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled);
+          compiler.set("runs", args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs);
 
           compiler.event.register("compilationFinished", (success: boolean, data: any, _source: any) => {
             if (success) {
@@ -84,7 +85,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
             compiler.compile(args.sources, "");
           });
 
-          compiler.loadRemoteVersion("v0.8.26+commit.8a97fa7a");
+          compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
         });
 
         const contractData = compilationResult.contracts[args.contractFile]?.[args.contractName];
@@ -172,7 +173,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
           } catch (methodEstimateError: any) {
             // If we can't estimate the method call gas, use a conservative estimate
             console.log(`   Could not estimate method call gas: ${methodEstimateError.message}`);
-            const methodCallEstimate = BigInt(150000); // Conservative estimate
+            const methodCallEstimate = BigInt(TOOL_CONFIG.gas.fallbackMethodCallGas);
             totalGasEstimate = totalGasEstimate + methodCallEstimate;
             console.log(`   Method Call Gas Estimate (fallback): ${methodCallEstimate}`);
           }
@@ -184,9 +185,10 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         const gasPrice = await publicClient.getGasPrice();
         console.log(`   Gas Price: ${gasPrice} wei`);
 
-        // Add 20% buffer for safety
-        const gasCostWei = (totalGasEstimate * gasPrice * BigInt(120)) / BigInt(100);
-        console.log(`   Estimated Cost (with 20% buffer): ${gasCostWei} wei`);
+        // Add buffer for safety
+        const bufferMultiplier = BigInt(Math.floor((1 + TOOL_CONFIG.payments.compileAndDeploy.gasBufferPercentage) * 100));
+        const gasCostWei = (totalGasEstimate * gasPrice * bufferMultiplier) / BigInt(100);
+        console.log(`   Estimated Cost (with ${TOOL_CONFIG.payments.compileAndDeploy.gasBufferPercentage * 100}% buffer): ${gasCostWei} wei`);
 
         // Add the value being sent if any (deployment value + post-deployment call value)
         const deploymentValueWei = args.value ? BigInt(args.value) : BigInt(0);
@@ -206,21 +208,21 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         console.log(`   Total Cost (gas + value): ${totalCostWei} wei`);
 
         // Convert to USD (using conservative ETH price estimate)
-        const ethUsdPrice = 3000;
+        const ethUsdPrice = TOOL_CONFIG.gas.ethUsdPrice;
         const totalCostEth = Number(totalCostWei) / 1e18;
         const totalCostUsd = totalCostEth * ethUsdPrice;
 
-        // Add 30% service fee on total cost (gas + value)
-        const serviceFee = totalCostUsd * 0.3;
+        // Add service fee on total cost (gas + value)
+        const serviceFee = totalCostUsd * TOOL_CONFIG.payments.compileAndDeploy.serviceFeePercentage;
         const totalWithServiceFee = totalCostUsd + serviceFee;
 
-        // Add base service fee of 0.05 USDC
-        const baseFee = 0.05;
+        // Add base service fee
+        const baseFee = TOOL_CONFIG.payments.compileAndDeploy.baseFeeUsd;
         const finalCostUsd = totalWithServiceFee + baseFee;
-        const usdcAmount = Math.ceil(finalCostUsd * 1_000_000).toString();
+        const usdcAmount = usdToUsdc(finalCostUsd);
 
         console.log(`   Total Cost (gas + value): $${totalCostUsd.toFixed(6)} USD`);
-        console.log(`   Service Fee (30% of total): $${serviceFee.toFixed(6)} USD`);
+        console.log(`   Service Fee (${TOOL_CONFIG.payments.compileAndDeploy.serviceFeePercentage * 100}% of total): $${serviceFee.toFixed(6)} USD`);
         console.log(`   Base Service Fee: $${baseFee.toFixed(6)} USD`);
         console.log(`   Total Cost: $${finalCostUsd.toFixed(6)} USD`);
         console.log(`   USDC Amount: ${usdcAmount} (${finalCostUsd.toFixed(6)} USDC)`);
@@ -239,7 +241,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         // Fallback to default pricing
         return createPaymentRequirements(
           "compile_and_deploy",
-          "50000", // 0.05 USDC
+          TOOL_CONFIG.payments.compileAndDeploy.baseFee,
           `Payment for compilation and delegated deployment service (gas estimation failed: ${error.message})`
         );
       }
@@ -271,9 +273,9 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       });
 
       const compilationResult: any = await new Promise((resolve, reject) => {
-        compiler.set("evmVersion", args.settings?.evmVersion ?? "london");
-        compiler.set("optimize", args.settings?.optimizer?.enabled ?? true);
-        compiler.set("runs", args.settings?.optimizer?.runs ?? 200);
+        compiler.set("evmVersion", args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion);
+        compiler.set("optimize", args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled);
+        compiler.set("runs", args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs);
 
         compiler.event.register("compilationFinished", (success: boolean, data: any, _source: any) => {
           if (success) {
@@ -295,7 +297,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
           compiler.compile(args.sources, "");
         });
 
-        compiler.loadRemoteVersion("v0.8.26+commit.8a97fa7a");
+        compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
       });
 
       if (!compilationResult.success) {
@@ -399,10 +401,10 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
           warnings: compilationResult.errors || [],
           settings: {
             optimizer: {
-              enabled: args.settings?.optimizer?.enabled ?? true,
-              runs: args.settings?.optimizer?.runs ?? 200
+              enabled: args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled,
+              runs: args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs
             },
-            evmVersion: args.settings?.evmVersion ?? "london"
+            evmVersion: args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion
           }
         },
         deployment: {
@@ -427,8 +429,8 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         }
 
         try {
-          // Use a conservative gas limit for post-deployment calls (200k should be plenty)
-          const gasLimit = BigInt(200000);
+          // Use a conservative gas limit for post-deployment calls
+          const gasLimit = BigInt(TOOL_CONFIG.gas.defaultMethodCallGasLimit);
           console.log(`   Using gas limit: ${gasLimit}`);
 
           const callHash = await walletClient.writeContract({

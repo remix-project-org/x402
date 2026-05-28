@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Compiler } from "@remix-project/remix-solidity";
 import { createPaymentRequirements, handlePayment } from "../utils/payment.js";
 import { getRpcUrl } from "../config/network.js";
+import { TOOL_CONFIG, usdToUsdc } from "../config/tools.js";
 
 // Helper function to dynamically get chain from viem
 async function getChainFromViem(networkName: string): Promise<any> {
@@ -61,9 +62,9 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
           });
 
           const compilationResult: any = await new Promise((resolve, reject) => {
-            compiler.set("evmVersion", args.settings?.evmVersion ?? "london");
-            compiler.set("optimize", args.settings?.optimizer?.enabled ?? true);
-            compiler.set("runs", args.settings?.optimizer?.runs ?? 200);
+            compiler.set("evmVersion", args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion);
+            compiler.set("optimize", args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled);
+            compiler.set("runs", args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs);
 
             compiler.event.register("compilationFinished", (success: boolean, data: any, _source: any) => {
               if (success) {
@@ -82,7 +83,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
               compiler.compile(args.sources, "");
             });
 
-            compiler.loadRemoteVersion("v0.8.26+commit.8a97fa7a");
+            compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
           });
 
           const contractData = compilationResult.contracts[args.contractFile]?.[args.contractName];
@@ -167,14 +168,15 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
                   totalGasEstimate = totalGasEstimate + methodCallEstimate;
                 } catch {
                   // Fallback estimate
-                  totalGasEstimate = totalGasEstimate + BigInt(150000);
+                  totalGasEstimate = totalGasEstimate + BigInt(TOOL_CONFIG.gas.fallbackMethodCallGas);
                 }
               }
 
               const gasPrice = await publicClient.getGasPrice();
-              const gasCostWei = (totalGasEstimate * gasPrice * BigInt(120)) / BigInt(100);
+              const bufferMultiplier = BigInt(Math.floor((1 + TOOL_CONFIG.payments.multiNetworkDeploy.gasBufferPercentage) * 100));
+              const gasCostWei = (totalGasEstimate * gasPrice * bufferMultiplier) / BigInt(100);
 
-              const ethUsdPrice = 3000;
+              const ethUsdPrice = TOOL_CONFIG.gas.ethUsdPrice;
               const gasCostEth = Number(gasCostWei) / 1e18;
               const gasCostUsd = gasCostEth * ethUsdPrice;
 
@@ -191,7 +193,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
             } catch (error: any) {
               console.log(`     ⚠️  Estimation failed for ${network}: ${error.message}`);
               // Use fallback pricing
-              const fallbackCost = 0.05;
+              const fallbackCost = TOOL_CONFIG.payments.multiNetworkDeploy.fallbackCostPerNetwork;
               totalCostUsd += fallbackCost;
               networkEstimates.push({
                 network,
@@ -202,19 +204,19 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
           }
 
           // Add service fees
-          const serviceFee = totalCostUsd * 0.3;
+          const serviceFee = totalCostUsd * TOOL_CONFIG.payments.multiNetworkDeploy.serviceFeePercentage;
           const gasWithServiceFee = totalCostUsd + serviceFee;
-          const baseFee = 0.05;
+          const baseFee = TOOL_CONFIG.payments.multiNetworkDeploy.baseFeeUsd;
 
-          // Add additional 10% buffer for multi-network deployments to account for nonce changes
-          const multiNetworkBuffer = gasWithServiceFee * 0.1;
+          // Add additional buffer for multi-network deployments to account for nonce changes
+          const multiNetworkBuffer = gasWithServiceFee * TOOL_CONFIG.payments.multiNetworkDeploy.multiNetworkBufferPercentage;
           const finalCostUsd = gasWithServiceFee + baseFee + multiNetworkBuffer;
-          const usdcAmount = Math.ceil(finalCostUsd * 1_000_000).toString();
+          const usdcAmount = usdToUsdc(finalCostUsd);
 
           console.log(`\n   Total Gas Cost: $${totalCostUsd.toFixed(6)} USD`);
-          console.log(`   Service Fee (30%): $${serviceFee.toFixed(6)} USD`);
+          console.log(`   Service Fee (${TOOL_CONFIG.payments.multiNetworkDeploy.serviceFeePercentage * 100}%): $${serviceFee.toFixed(6)} USD`);
           console.log(`   Base Service Fee: $${baseFee.toFixed(6)} USD`);
-          console.log(`   Multi-Network Buffer (10%): $${multiNetworkBuffer.toFixed(6)} USD`);
+          console.log(`   Multi-Network Buffer (${TOOL_CONFIG.payments.multiNetworkDeploy.multiNetworkBufferPercentage * 100}%): $${multiNetworkBuffer.toFixed(6)} USD`);
           console.log(`   Total Cost: $${finalCostUsd.toFixed(6)} USD`);
 
           return createPaymentRequirements(
@@ -226,11 +228,11 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
         } catch (error: any) {
           console.error(`❌ Multi-network gas estimation failed:`, error.message);
 
-          // Fallback: 0.05 USDC per network
-          const fallbackCostPerNetwork = 0.05;
+          // Fallback to default pricing per network
+          const fallbackCostPerNetwork = TOOL_CONFIG.payments.multiNetworkDeploy.fallbackCostPerNetwork;
           const totalNetworks = args.networks.length;
           const fallbackTotal = fallbackCostPerNetwork * totalNetworks;
-          const usdcAmount = Math.ceil(fallbackTotal * 1_000_000).toString();
+          const usdcAmount = usdToUsdc(fallbackTotal);
 
           return createPaymentRequirements(
             "compile_and_deploy_multi_network",
@@ -264,9 +266,9 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
         });
 
         const compilationResult: any = await new Promise((resolve, reject) => {
-          compiler.set("evmVersion", args.settings?.evmVersion ?? "london");
-          compiler.set("optimize", args.settings?.optimizer?.enabled ?? true);
-          compiler.set("runs", args.settings?.optimizer?.runs ?? 200);
+          compiler.set("evmVersion", args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion);
+          compiler.set("optimize", args.settings?.optimizer?.enabled ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled);
+          compiler.set("runs", args.settings?.optimizer?.runs ?? TOOL_CONFIG.compiler.defaultSettings.optimizer.runs);
 
           compiler.event.register("compilationFinished", (success: boolean, data: any, _source: any) => {
             if (success) {
@@ -288,7 +290,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
             compiler.compile(args.sources, "");
           });
 
-          compiler.loadRemoteVersion("v0.8.26+commit.8a97fa7a");
+          compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
         });
 
         if (!compilationResult.success) {
@@ -371,7 +373,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
 
             const receipt = await walletClient.waitForTransactionReceipt({
               hash,
-              confirmations: 2
+              confirmations: TOOL_CONFIG.deployment.defaultConfirmations
             });
 
             console.log(`   ✅ Deployed at: ${receipt.contractAddress}`);
@@ -401,7 +403,7 @@ export function registerMultiNetworkDeploymentTool(mcp: FastMCP) {
 
                 const callReceipt = await walletClient.waitForTransactionReceipt({
                   hash: callHash,
-                  confirmations: 2
+                  confirmations: TOOL_CONFIG.deployment.defaultConfirmations
                 });
 
                 const isSuccess = callReceipt.status === 'success';
