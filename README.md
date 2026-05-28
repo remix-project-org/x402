@@ -1,4 +1,4 @@
-# x402 MCP Server
+# Remix x402 MCP Server
 
 An MCP (Model Context Protocol) server implementing the x402 payment protocol for paid Solidity development tools using USDC on Base networks (Sepolia testnet and mainnet).
 
@@ -53,19 +53,10 @@ Modular MCP server implementation with payment-gated tools:
 - `src/examples/` - Example client implementations
 - `tests/e2e/` - End-to-end integration tests
 
-## Prerequisites
-
-- Node.js (v18 or higher)
-- A funded wallet for the server's deployment service (BASE tokens for gas)
-- An address to receive USDC payments
-
 ## Installation
 
 ```bash
 # Install dependencies
-yarn install
-
-# or
 yarn install
 ```
 
@@ -92,9 +83,6 @@ All tool settings are centralized in `src/server/config/tools.ts`:
 ```bash
 # Build TypeScript files
 yarn run build
-
-# or
-yarn build
 ```
 
 ## Running the Server
@@ -203,11 +191,9 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 
 **Payment Required**: 0.02 USDC (20000 with 6 decimals)
 
-**API Endpoint**: `https://mcp.api.remix.live/slither/analyze`
-
 **Parameters**:
 - `sources`: Object with contract filenames as keys and their content
-- `version` (optional): Solidity compiler version (e.g., `"0.8.26+commit.8a97fa7a"`). Defaults to `0.8.26`
+- `version` (optional): Solidity compiler version (e.g., `"0.8.26+commit.8a97fa7a"`). Defaults to `0.8.35`
 - `detectors` (optional): Array of specific detectors to run (e.g., `['reentrancy-eth', 'tx-origin']`). Filters results client-side.
 - `excludeInformational` (optional): Filter out informational severity findings
 - `excludeLow` (optional): Filter out low severity findings
@@ -264,8 +250,6 @@ Runs Slither security analysis on Solidity contracts using the Remix API endpoin
 - **Medium**: `reentrancy-benign`, `reentrancy-events`, `tx-origin`, `unchecked-transfer`
 - **Low**: `low-level-calls`, `naming-convention`, `solc-version`
 - **Informational**: All other detectors
-
-**Note**: This tool uses the Remix Slither API (`https://mcp.api.remix.live/slither/analyze`), so no local Slither installation is required. The server parses the Remix API text output and structures it into categorized findings.
 
 ### compile_and_deploy
 
@@ -434,8 +418,6 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 - **Chain ID**: 84532
 - **USDC Contract**: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
 - **RPC**: `https://sepolia.base.org`
-
-```
 
 ## Links
 
