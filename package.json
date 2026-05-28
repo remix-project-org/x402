@@ -2,7 +2,7 @@
   "name": "x402_pg",
   "version": "1.0.0",
   "type": "module",
-  "description": "X402 mcp tool",
+  "description": "Remix X402 MCP Server",
   "main": "index.js",
   "scripts": {
     "build": "tsc",
