@@ -4,10 +4,11 @@ An MCP (Model Context Protocol) server implementing the x402 payment protocol fo
 
 ## Overview
 
-This project demonstrates a complete x402 payment flow where:
-- **Client** creates payment authorizations and settles them on-chain (pays gas fees)
-- **Server** verifies payment settlement on-chain before providing services
-- Payments are made in USDC using EIP-3009 `TransferWithAuthorization`
+This is a **server-side implementation** of an x402-enabled MCP server that provides paid Solidity development tools. The server:
+- **Verifies x402 payment settlements** on-chain before providing services
+- **Provides Solidity compilation**, security analysis, and deployment services
+- **Uses USDC payments** via EIP-3009 `TransferWithAuthorization`
+- **Operates a delegated deployment service** where the server deploys contracts on behalf of clients
 
 ## Features
 
@@ -24,17 +25,11 @@ This project demonstrates a complete x402 payment flow where:
 - **Custom Wallet**: EIP-712 signature implementation for USDC compatibility
 - **MCP Integration**: Built with Ampersend SDK for seamless payment-gated tools
 
+📖 **[View detailed tool usage and API documentation →](USAGE.md)**
+
 ## Architecture
 
-### Client Side
-- `src/lib/` - Client SDK for MCP communication and X402 payments
-  - `index.js` - MCP client factory
-  - `treasurer.js` - Payment authorization and settlement
-  - `usdc-wallet.js` - USDC-compatible wallet implementation
-  - `wallet.js`, `transport.js`, `naive-treasurer.js` - Supporting utilities
-- `src/examples/` - Example implementations demonstrating tool usage
-
-### Server Side
+### Server Implementation
 Modular MCP server implementation with payment-gated tools:
 - `src/server/` - Organized server architecture
   - `index.ts` - Main entry point (36 lines)
@@ -47,16 +42,22 @@ Modular MCP server implementation with payment-gated tools:
     - `payment.ts` - Payment verification utilities (70 lines)
   - `config/` - Configuration management
     - `network.ts` - Centralized network configuration for easy mainnet/testnet switching
+    - `tools.ts` - Central tool configuration (compiler versions, pricing, gas settings)
 - Verifies X402 payments on-chain before executing tools
 - Integrates with Remix API for Slither analysis
 - Provides Delegated Deployment Service for secure contract deployment
 - See `REFACTORING_SUMMARY.md` for detailed refactoring documentation
 
+### Testing & Examples
+- `src/lib/` - Client SDK (included for testing and examples)
+- `src/examples/` - Example client implementations
+- `tests/e2e/` - End-to-end integration tests
+
 ## Prerequisites
 
 - Node.js (v18 or higher)
-- USDC on Base Sepolia testnet
-- Private key for your wallet
+- A funded wallet for the server's deployment service (BASE tokens for gas)
+- An address to receive USDC payments
 
 ## Installation
 
@@ -72,41 +73,19 @@ yarn install
 
 ### Server Configuration
 
-Create a `.env` file in the project root:
+ Most configuration values now have defaults in `src/server/config/tools.ts`. You only need to set:
+- `SERVER_DEPLOYER_PRIVATE_KEY` (required for deployment service)
+- `PAY_TO_ADDRESS` (required for receiving payments)
 
-```env
-# Your wallet private key (DO NOT commit this!)
-PRIVATE_KEY=0x...
+### Tool Configuration
 
-# Address where payments should be sent (server owner's address)
-PAY_TO_ADDRESS=0x...
-
-# Server deployer wallet for Delegated Deployment Service
-# This wallet needs to be funded with native tokens for gas
-SERVER_DEPLOYER_PRIVATE_KEY=0x...
-```
-
-### E2E Test Configuration
-
-Create a `.env.test` file for running E2E tests:
-
-```env
-# Test wallet private key (needs USDC on Base Sepolia)
-PRIVATE_KEY=0x...
-
-# Payment recipient address
-PAY_TO_ADDRESS=0x...
-
-# Network (must be base-sepolia for E2E tests)
-NETWORK=base-sepolia
-
-# MCP Server URL
-MCP_SERVER_URL=http://localhost:8000/mcp
-```
-
-### Getting Test USDC
-
-Get testnet USDC from [Circle Faucet](https://faucet.circle.com/) for Base Sepolia testing
+All tool settings are centralized in `src/server/config/tools.ts`:
+- Compiler versions (currently v0.8.35)
+- EVM version (currently osaka)
+- Pricing for each tool
+- Gas estimation parameters
+- Service fees and buffers
+- Default network and RPC URLs
 
 ## Building
 
@@ -118,9 +97,9 @@ yarn run build
 yarn build
 ```
 
-## Usage
+## Running the Server
 
-### 1. Start the MCP Server
+### Start the MCP Server
 
 ```bash
 # Build and start the server
@@ -129,14 +108,16 @@ yarn build && yarn start
 
 The server will start on `http://localhost:8000/mcp`
 
-### 2. Run E2E Tests
+## Testing
+
+### E2E Tests
 
 End-to-end tests verify the complete payment and tool execution flow with real blockchain transactions.
 
 **Prerequisites:**
-- MCP server must be running (see step 1)
+- MCP server must be running
 - Test wallet funded with USDC on Base Sepolia
-- Configure `.env.test` with your test wallet private key
+- Configure `.env.test` or `.env` with test wallet
 
 **Run tests:**
 ```bash
@@ -151,70 +132,19 @@ yarn test:verbose
 ```
 
 **Test coverage:**
-- ✅ Basic compilation with automatic payment
+- ✅ Compilation with automatic payment
 - ✅ Custom compiler settings
 - ✅ Multiple files with imports
-- ✅ Error handling
-- ✅ Warnings vs errors
+- ✅ Security analysis with Slither
+- ✅ Contract deployment
+- ✅ Multi-network deployment
 - ✅ Payment flow verification
 
-**Cost per test run:** ~0.06 USDC + gas fees (6 tests × 0.01 USDC each)
+### Example Clients
 
-### 3. Run the Clients
+Example client implementations are provided in `src/examples/` for testing and reference:
 
-All client examples are organized in the `clients/` directory. You can:
-
-**View all available examples:**
-```bash
-yarn run examples
-```
-
-**Run individual examples:**
-
-#### Solidity Compilation Example
-```bash
-yarn run example:compile
-```
-- Compiles Solidity contracts
-- Cost: 0.01 USDC
-
-#### Slither Security Analysis Example
-```bash
-yarn run example:slither
-```
-- Runs security analysis on contracts
-- Cost: 0.02 USDC
-
-#### Deploy Contract Example (Delegated Deployment Service)
-```bash
-yarn run example:deploy
-```
-- Compiles and deploys contracts using server's wallet
-- Cost: Dynamic based on gas estimation (minimum 0.05 USDC)
-- **Server estimates deployment gas before requiring payment**
-- **No private key required from client!**
-
-#### Deploy Contract and Call Method Example
-```bash
-yarn run example:deploy-and-call
-```
-- Compiles and deploys contracts, then calls a method
-- Demonstrates post-deployment method execution with dynamic pricing
-- Cost: Dynamic (deployment + method call gas, minimum 0.05 USDC)
-- **Server estimates total gas before requiring payment**
-- **Shows both deployment and method call transaction details**
-
-### How Clients Work
-
-Each client automatically handles the x402 payment flow:
-1. Connect to the MCP server
-2. Request a tool execution
-3. X402 treasurer settles payment on-chain (USDC transfer)
-4. Server verifies payment settlement
-5. Tool executes and returns results
-6. All payment handling is automatic via Ampersend SDK
-
-## Payment Flow
+## Server Payment Flow
 
 ```
 Client                          Server
@@ -222,19 +152,25 @@ Client                          Server
   |---(1) Request Tool----------->|
   |                               |
   |<--(2) 402 Payment Required----|
+  |    (amount, USDC address)     |
   |                               |
   |---(3) Create Authorization--->|
+  |    (EIP-712 signature)        |
   |                               |
   |---(4) Settle On-Chain-------->| (Blockchain)
+  |    (executes USDC transfer)   |
   |                               |
   |---(5) Re-request with Proof-->|
   |                               |
   |                      (6) Verify Settlement
+  |                       (reads blockchain)
   |                               |
   |<--(7) Execute & Return--------|
 ```
 
 ## Tools Available
+
+> 💡 **For complete tool documentation with request/response examples, see [USAGE.md](USAGE.md)**
 
 ### compile_solidity
 
@@ -468,13 +404,14 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 ```
 
 **How it works**:
-1. Client pays 0.05 USDC via X402
-2. Server verifies payment on-chain
-3. Server compiles the contract
-4. Server deploys using its own wallet (SERVER_DEPLOYER_PRIVATE_KEY)
-5. (Optional) Server calls the specified method on the deployed contract
-6. Server pays all gas fees (covered by your payment)
-7. Client receives contract address, deployment details, and method call results
+1. Server estimates gas cost and calculates total payment required
+2. Client pays dynamic amount via X402
+3. Server verifies payment on-chain
+4. Server compiles the contract
+5. Server deploys using its own wallet (SERVER_DEPLOYER_PRIVATE_KEY)
+6. (Optional) Server calls the specified method on the deployed contract
+7. Server pays all gas fees (covered by client payment)
+8. Server returns contract address, deployment details, and method call results
 
 **Flow and Error Handling**:
 - If gas estimation fails → falls back to default 0.05 USDC
@@ -498,57 +435,6 @@ Compiles and deploys Solidity contracts using the server's Delegated Deployment 
 - **USDC Contract**: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
 - **RPC**: `https://sepolia.base.org`
 
-## Security Notes
-
-- Never commit your private key
-- Only use testnet funds for development
-- The `.env` file is gitignored by default
-- Server verifies all payments on-chain before executing tools
-
-## Example Output
-
-### Slither Analysis Example
-
-```bash
-$ yarn run slither
-
-🔌 Connecting to MCP server...
-✅ Connected!
-
-🔍 Running Slither security analysis...
-
-✅ Analysis completed successfully!
-   (Payment was settled on-chain and verified before analysis)
-
-📋 Summary:
-   Total Findings: 4
-   High Severity: 1
-   Medium Severity: 0
-   Low Severity: 3
-   Informational: 0
-   Optimization: 0
-
-🐛 Detailed Findings:
-
-  1. [High] reentrancy-eth
-     Confidence: Medium
-     Reentrancy in VulnerableBank.withdraw(uint256)...
-     External calls:
-     - (success,None) = msg.sender.call{value: _amount}()
-     ... (5 more lines)
-     Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-1
-
-  2. [Low] solc-version
-     Confidence: Medium
-     Version constraint ^0.8.0 contains known severe issues...
-
-  3. [Low] low-level-calls
-     Confidence: Medium
-     Low level call in VulnerableBank.withdraw(uint256)...
-
-  4. [Low] naming-convention
-     Confidence: Medium
-     Parameter VulnerableBank.withdraw(uint256)._amount is not in mixedCase...
 ```
 
 ## Links

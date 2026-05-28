@@ -3,7 +3,10 @@
  *
  * This file provides centralized network configuration for the X402 MCP server.
  * To switch between networks, update the NETWORK environment variable in .env
+ * or modify the defaultNetwork in tools.ts config
  */
+
+import { TOOL_CONFIG } from "./tools.js";
 
 export interface NetworkConfig {
   name: string;
@@ -27,7 +30,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     name: "base-sepolia",
     displayName: "Base Sepolia Testnet",
     chainId: 84532,
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
+    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || TOOL_CONFIG.defaultRpcUrls["base-sepolia"],
     explorerUrl: "https://sepolia.basescan.org",
     nativeCurrency: {
       name: "Ether",
@@ -40,7 +43,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     name: "sepolia",
     displayName: "Sepolia Testnet",
     chainId: 11155111,
-    rpcUrl: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
+    rpcUrl: process.env.SEPOLIA_RPC_URL || TOOL_CONFIG.defaultRpcUrls["sepolia"],
     explorerUrl: "https://sepolia.etherscan.io",
     nativeCurrency: {
       name: "Ether",
@@ -53,7 +56,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
     name: "base",
     displayName: "Base Mainnet",
     chainId: 8453,
-    rpcUrl: process.env.BASE_RPC_URL || "https://mainnet.base.org",
+    rpcUrl: process.env.BASE_RPC_URL || TOOL_CONFIG.defaultRpcUrls["base"],
     explorerUrl: "https://basescan.org",
     nativeCurrency: {
       name: "Ether",
@@ -66,10 +69,10 @@ export const NETWORKS: Record<string, NetworkConfig> = {
 
 /**
  * Get the active network configuration from environment
- * Defaults to base-sepolia if NETWORK is not set
+ * Defaults to configured defaultNetwork if NETWORK is not set
  */
 export function getActiveNetwork(): NetworkConfig {
-  const networkName = process.env.NETWORK || "base-sepolia";
+  const networkName = process.env.NETWORK || TOOL_CONFIG.defaultNetwork;
   const network = NETWORKS[networkName];
 
   if (!network) {

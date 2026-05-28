@@ -5,6 +5,15 @@
  */
 
 export const TOOL_CONFIG = {
+  // Default Network Configuration
+  defaultNetwork: "base-sepolia", // Can be overridden by NETWORK env var
+
+  // Default RPC URLs (can be overridden by env vars)
+  defaultRpcUrls: {
+    "base-sepolia": "https://sepolia.base.org",
+    "sepolia": "https://ethereum-sepolia-rpc.publicnode.com",
+    "base": "https://mainnet.base.org"
+  },
   // Compiler Configuration
   compiler: {
     version: "v0.8.35+commit.47b9dedd",
