@@ -11,9 +11,9 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 ## Available Tools
 
 ### 1. Solidity Compilation
-**Tool:** `compile_solidity`
-**Price:** 0.01 USDC
-**Description:** Compile your Solidity smart contracts using the Remix compiler.
+**Tool:** `compile_solidity` <br/>
+**Price:** 0.01 USDC<br/>
+**Description:** Compile your Solidity smart contracts using the Remix compiler.<br/>
 
 **What you get:**
 - Full compilation output with bytecode and ABI
@@ -22,9 +22,9 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 - Detailed error and warning messages
 
 ### 2. Security Analysis with Slither
-**Tool:** `analyze_with_slither`
-**Price:** 0.02 USDC
-**Description:** Run static security analysis on your Solidity contracts using Slither.
+**Tool:** `analyze_with_slither`<br/>
+**Price:** 0.02 USDC<br/>
+**Description:** Run static security analysis on your Solidity contracts using Slither.<br/>
 
 **What you get:**
 - Comprehensive security vulnerability detection
