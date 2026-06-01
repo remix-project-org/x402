@@ -60,49 +60,148 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 
 ### Prerequisites
 
-1. **USDC Balance**: You need USDC tokens on Base Sepolia testnet
-   - Get Base Sepolia USDC from faucets (see "Getting USDC" section below)
+1. **Node.js**: Version 18 or higher required
+   - Check your version: `node --version`
+   - Download from [nodejs.org](https://nodejs.org/)
+
+2. **Wallet with Funds**: A wallet with both ETH and USDC on Base Sepolia testnet
+   - **Base Sepolia USDC**: 1-5 USDC for paying for services
+   - **Base Sepolia ETH**: ~0.01 ETH for gas when settling payments
    - No real money required - testnet only!
 
-2. **Wallet**: A wallet with a private key to sign payment authorizations
+### Installation
 
-### Quick Start with MCP Client
+```bash
+# Clone the repository
+git clone https://github.com/remix-project-org/x402.git
+cd x402
+
+# Install dependencies
+yarn install
+```
+
+### Wallet Setup & Configuration
+
+The MCP client needs a wallet to sign x402 payment authorizations. The wallet is configured via environment variables.
+
+#### Step 1: Set Your Private Key
+
+Create a `.env` file in the project root:
+
+```bash
+# .env file
+PRIVATE_KEY=0xYourPrivateKeyHere
+```
+
+Or set it as an environment variable:
+
+```bash
+export PRIVATE_KEY="0xYourPrivateKeyHere"
+```
+
+#### Step 2: Fund Your Wallet
+
+Your wallet needs:
+- **Base Sepolia USDC** - To pay for services (1-5 USDC recommended)
+- **Base Sepolia ETH** - To pay gas for payment settlements (~0.01 ETH)
+
+Check balance at: `https://sepolia.basescan.org/address/YOUR_ADDRESS`
+
+#### Step 3: Use the Client
 
 ```javascript
 import { createMCPClient } from './src/lib/index.js';
 
-// Connect to the public server
-const serverUrl = 'https://mcp.api.remix.live/x402/mcp';
+// Client reads PRIVATE_KEY from environment
 const { client, transport, wallet } = createMCPClient(serverUrl, {
   name: 'Your-App-Name',
   version: '1.0.0'
 });
 
-await client.connect(transport);
+```
 
-// Use a tool - payments are handled automatically
+**Security Note:**
+- Never commit your `.env` file to git
+- Your private key never leaves your machine
+- The client only uses it to sign payment authorizations
+
+### How x402 Payments Work
+
+When you call a tool, the payment flow happens automatically:
+
+```javascript
+// You call a tool
 const result = await client.callTool({
   name: "compile_solidity",
-  arguments: {
-    sources: {
-      "HelloWorld.sol": {
-        content: `
+  arguments: { /* ... */ }
+});
+
+// Behind the scenes, the client:
+// 1. Receives payment request from server (amount + nonce)
+// 2. Uses YOUR WALLET to sign a USDC transfer authorization (EIP-3009)
+//    - This is a gasless signature (no gas cost)
+//    - Authorizes the server to receive USDC from your wallet
+// 3. Submits the signed authorization on-chain (YOU pay gas for this)
+// 4. Server verifies payment on-chain
+// 5. Server executes the tool
+// 6. You receive the results
+```
+
+### Quick Start Script
+
+Here's a complete working example:
+
+```javascript
+import { createMCPClient } from './src/lib/index.js';
+
+async function main() {
+  // Create client (reads PRIVATE_KEY from .env)
+  const serverUrl = 'https://mcp.api.remix.live/x402/mcp';
+  const { client, transport, wallet } = createMCPClient(serverUrl, {
+    name: 'My-Remix-App',
+    version: '1.0.0'
+  });
+
+  // Wallet address is logged automatically by createMCPClient
+  // Make sure this address has USDC and ETH on Base Sepolia!
+
+  // Connect to server
+  await client.connect(transport);
+  console.log('Connected to Remix x402 MCP Server\n');
+
+  // Use a tool - payment happens automatically
+  console.log('Compiling contract (cost: 0.01 USDC)...');
+  const result = await client.callTool({
+    name: "compile_solidity",
+    arguments: {
+      sources: {
+        "HelloWorld.sol": {
+          content: `
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 contract HelloWorld {
     string public message = "Hello, World!";
 }
-        `
+          `
+        }
       }
-    },
-    contractName: "HelloWorld",
-    contractFile: "HelloWorld.sol"
-  }
-});
+    }
+  });
 
-console.log(JSON.parse(result.content[0].text));
+  // View results
+  const output = JSON.parse(result.content[0].text);
+  console.log('✓ Compilation successful!');
+  console.log('Contract ABI:', output.contracts['HelloWorld.sol'].HelloWorld.abi);
+}
+
+main().catch(console.error);
 ```
+
+**To run:**
+1. Create `.env` file with your `PRIVATE_KEY`
+2. Save script as `example.js`
+3. Run: `node example.js`
 
 ## Tool Usage Examples
 
@@ -117,8 +216,6 @@ const result = await client.callTool({
         content: `// Your Solidity code here`
       }
     },
-    contractName: "MyContract",
-    contractFile: "MyContract.sol",
     settings: {
       optimizer: { enabled: true, runs: 200 },
       evmVersion: "paris"
@@ -137,9 +234,7 @@ const result = await client.callTool({
       "Token.sol": {
         content: `// Your token contract code`
       }
-    },
-    contractName: "Token",
-    contractFile: "Token.sol"
+    }
   }
 });
 ```
@@ -275,14 +370,6 @@ The client automatically handles common errors:
 - **Issues**: Report bugs or request features on GitHub
 - **Documentation**: Full technical docs in the repository
 
-## Getting USDC on Base Sepolia
-
-For testing:
-1. Get Sepolia ETH from a faucet
-2. Bridge to Base Sepolia using the official bridge
-3. Swap for USDC on Base Sepolia testnet
-4. Or use Base Sepolia faucets that provide USDC directly
-
 ## FAQ
 
 **Q: What happens if my deployment fails?**<br/>
@@ -303,6 +390,9 @@ A: We use a 120% buffer on gas estimation to ensure transactions succeed. Actual
 **Q: Can I use this in production?**<br/>
 A: Not yet. The server is currently testnet-only. Mainnet support will be announced soon.
 
+**Q: Is the MCP server responsible for the smart contract code I deploy?**<br/>
+A: No. The MCP server is a deployment service only. You are solely responsible for the smart contract code you write and deploy. The server does not audit, verify, or take responsibility for the functionality, security, or consequences of your deployed contracts. Always audit your code and use security analysis tools before deployment.
+
 ## Testnet Testing Period
 
 We're currently in a **testnet evaluation phase**. During this period:
@@ -313,14 +403,20 @@ We're currently in a **testnet evaluation phase**. During this period:
 
 Your feedback helps us improve! Report issues or suggest features on GitHub.
 
-## Next Steps
+## Troubleshooting
 
-1. Get some USDC on Base Sepolia (see guide above)
-2. Clone the example client code
-3. Try compiling a simple contract
-4. Explore security analysis
-5. Deploy your first testnet contract!
-6. Give us feedback on GitHub
+### "Insufficient USDC balance"
+- Check your wallet has USDC: `https://sepolia.basescan.org/address/YOUR_ADDRESS`
+- Make sure you're checking the USDC token balance, not ETH
+- Base Sepolia USDC contract: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+
+### "Insufficient gas"
+- Your wallet needs Base Sepolia ETH for gas when settling payments
+
+### "Payment settlement failed"
+- Ensure you have both USDC (for payment) and ETH (for gas)
+- Check network connectivity
+- Verify you're on Base Sepolia testnet
 
 ---
 
