@@ -10,6 +10,8 @@ x402 is a micropayment protocol that enables pay-per-use services. You pay small
 
 ## Available Tools
 
+> 📚 **For complete API specifications, input/output schemas, and advanced examples, see [API_REFERENCE.md](API_REFERENCE.md)**
+
 ### 1. Solidity Compilation
 **Tool:** `compile_solidity` <br/>
 **Price:** 0.01 USDC<br/>
@@ -205,6 +207,8 @@ main().catch(console.error);
 
 ## Tool Usage Examples
 
+> 💡 **Tip:** These are basic examples. For detailed input/output specifications and error handling, see [API_REFERENCE.md](API_REFERENCE.md)
+
 ### Example 1: Compile a Contract
 
 ```javascript
@@ -368,7 +372,9 @@ The client automatically handles common errors:
 
 - **GitHub**: [github.com/remix-project-org/x402](https://github.com/remix-project-org/x402)
 - **Issues**: Report bugs or request features on GitHub
-- **Documentation**: Full technical docs in the repository
+- **Documentation**:
+  - [API Reference](API_REFERENCE.md) - Complete API documentation
+  - [README.md](README.md) - Technical implementation details
 
 ## FAQ
 

@@ -10,22 +10,25 @@ This is a **server-side implementation** of an x402-enabled MCP server that prov
 - **Uses USDC payments** via EIP-3009 `TransferWithAuthorization`
 - **Operates a delegated deployment service** where the server deploys contracts on behalf of clients
 
+## Quick Links
+
+- 📖 **[Usage Guide](USAGE.md)** - Getting started, wallet setup, payment flow, and examples
+- 📚 **[API Reference](API_REFERENCE.md)** - Complete API specs for all 4 tools
+
 ## Features
 
-- **Paid Solidity Compilation**: Compile Solidity contracts using Remix compiler (0.01 USDC)
-- **Paid Slither Analysis**: Security analysis of Solidity contracts using Slither (0.02 USDC)
-- **Delegated Deployment Service**: Deploy contracts without sharing private keys
-  - Dynamic gas-based pricing + 0.05 USDC base fee
-  - Gas estimation before payment (deployment + optional method call)
-  - Pricing: Gas cost + 30% service fee + 0.05 USDC base fee
-  - Optional post-deployment method calls
-  - Automatic transaction handling and verification
-- **x402 Payment Protocol**: Fully compliant implementation with on-chain settlement verification
-- **USDC Payments**: ERC-20 token payments on Base networks (Sepolia testnet and mainnet)
-- **Custom Wallet**: EIP-712 signature implementation for USDC compatibility
-- **MCP Integration**: Built with Ampersend SDK for seamless payment-gated tools
+### Available Tools
+1. **compile_solidity** - Solidity compilation (0.01 USDC)
+2. **analyze_with_slither** - Security analysis (0.02 USDC)
+3. **compile_and_deploy** - Single network deployment (dynamic pricing)
+4. **compile_and_deploy_multi_network** - Multi-network deployment (dynamic pricing)
 
-📖 **[View detailed tool usage and API documentation →](USAGE.md)**
+### Technical Features
+- **x402 Payment Protocol**: On-chain settlement verification before service execution
+- **USDC Payments**: EIP-3009 `TransferWithAuthorization` for gasless approvals
+- **Delegated Deployment**: Server deploys contracts without requiring client private keys
+- **Dynamic Gas Pricing**: Fair, transparent gas-based pricing for deployments
+- **MCP Integration**: Built with Ampersend SDK for seamless payment-gated tools
 
 ## Architecture
 
@@ -132,7 +135,9 @@ yarn test:verbose
 
 Example client implementations are provided in `src/examples/` for testing and reference:
 
-## Server Payment Flow
+## x402 Payment Flow
+
+The server implements the x402 protocol for pay-per-use services:
 
 ```
 Client                          Server
@@ -156,261 +161,13 @@ Client                          Server
   |<--(7) Execute & Return--------|
 ```
 
-## Tools Available
+**Key Points:**
+- Payment verified on-chain before service execution
+- EIP-3009 for gasless USDC approvals
+- Dynamic pricing for deployment tools based on actual gas costs
+- Transparent pricing: clients see exact costs before payment
 
-> 💡 **For complete tool documentation with request/response examples, see [USAGE.md](USAGE.md)**
-
-### compile_solidity
-
-Compiles Solidity contracts using the Remix compiler.
-
-**Payment Required**: 0.01 USDC (10000 with 6 decimals)
-
-**Parameters**:
-- `sources`: Object with contract filenames as keys and their content
-- `settings` (optional): Compiler settings (optimizer, evmVersion)
-
-**Example**:
-```javascript
-{
-  sources: {
-    "SimpleStorage.sol": {
-      content: "contract SimpleStorage { uint256 value; }"
-    }
-  },
-  settings: {
-    optimizer: { enabled: true, runs: 200 },
-    evmVersion: "london"
-  }
-}
-```
-
-### analyze_with_slither
-
-Runs Slither security analysis on Solidity contracts using the Remix API endpoint to detect vulnerabilities, optimization opportunities, and best practice violations.
-
-**Payment Required**: 0.02 USDC (20000 with 6 decimals)
-
-**Parameters**:
-- `sources`: Object with contract filenames as keys and their content
-- `version` (optional): Solidity compiler version (e.g., `"0.8.26+commit.8a97fa7a"`). Defaults to `0.8.35`
-- `detectors` (optional): Array of specific detectors to run (e.g., `['reentrancy-eth', 'tx-origin']`). Filters results client-side.
-- `excludeInformational` (optional): Filter out informational severity findings
-- `excludeLow` (optional): Filter out low severity findings
-
-**Returns**:
-```javascript
-{
-  "success": true,
-  "summary": {
-    "totalFindings": 4,
-    "high": 1,
-    "medium": 0,
-    "low": 3,
-    "informational": 0,
-    "optimization": 0
-  },
-  "findings": [
-    {
-      "check": "reentrancy-eth",
-      "impact": "High",
-      "confidence": "Medium",
-      "description": "Reentrancy in VulnerableBank.withdraw...",
-      "reference": "https://github.com/crytic/slither/wiki/..."
-    }
-    // ... more findings
-  ],
-  "rawAnalysis": "Full Slither text output",
-  "rawOutput": { /* Remix API response */ }
-}
-```
-
-**Output includes**:
-- Summary with counts by severity (High, Medium, Low, Informational, Optimization)
-- Detailed findings with detector name, impact level, confidence, and description
-- Reference URLs to Slither documentation for each detector
-- Raw analysis text and API response for advanced use
-
-**Example**:
-```javascript
-{
-  sources: {
-    "VulnerableBank.sol": {
-      content: "contract VulnerableBank { ... }"
-    }
-  },
-  version: "0.8.26+commit.8a97fa7a",
-  excludeInformational: false,
-  excludeLow: false
-}
-```
-
-**Impact Level Classification**:
-- **High**: `reentrancy-eth`, `reentrancy-no-eth`, `suicidal`, `unprotected-upgrade`
-- **Medium**: `reentrancy-benign`, `reentrancy-events`, `tx-origin`, `unchecked-transfer`
-- **Low**: `low-level-calls`, `naming-convention`, `solc-version`
-- **Informational**: All other detectors
-
-### compile_and_deploy
-
-Compiles and deploys Solidity contracts using the server's Delegated Deployment Service (DDS). Optionally call a contract method immediately after deployment. Uses dynamic gas-based pricing for fair and transparent costs.
-
-**Payment Required**: Dynamic based on gas estimation + base service fee
-- Server compiles contract and estimates deployment gas
-- If post-deployment call specified:
-  - Predicts contract address using account nonce
-  - Estimates method call gas on predicted address
-  - Adds to total gas estimate
-- **Pricing Formula**:
-  ```
-  Gas Cost = (Total Gas × Gas Price × 1.2 buffer) × ETH/USD
-  Service Fee = Gas Cost × 30%
-  Base Fee = 0.05 USDC
-  Total = Gas Cost + Service Fee + Base Fee
-  ```
-- Base service fee of 0.05 USDC is always added
-- Falls back to 0.05 USDC if estimation fails
-- If method call estimation fails, uses 150k gas conservative estimate
-
-**Security**: Client never shares private keys. Server uses its own funded wallet for deployment.
-
-**Parameters**:
-- `sources`: Object with contract filenames as keys and their content
-- `contractName`: Name of the contract to deploy (e.g., "SimpleStorage")
-- `contractFile`: Filename containing the contract (e.g., "SimpleStorage.sol")
-- `constructorArgs` (optional): Array of constructor arguments
-- `settings` (optional): Compiler settings (optimizer, evmVersion)
-- `network`: Target network ("base-sepolia", "base", "avalanche-fuji", etc.)
-- `postDeploymentCall` (optional): Method to call after deployment
-  - `methodName`: Name of the method to call
-  - `methodArgs`: Array of arguments for the method
-
-**Returns (without post-deployment call)**:
-```javascript
-{
-  "success": true,
-  "compilation": {
-    "warnings": []
-  },
-  "deployment": {
-    "success": true,
-    "contractAddress": "0x...",
-    "transactionHash": "0x...",
-    "blockNumber": "12345",
-    "gasUsed": "500000",
-    "network": "base-sepolia",
-    "deployedBy": "server-delegated-deployer",
-    "deployerAddress": "0x..."
-  },
-  "abi": [...]
-}
-```
-
-**Returns (with successful post-deployment call)**:
-```javascript
-{
-  "success": true,
-  "compilation": { "warnings": [] },
-  "deployment": {
-    "success": true,
-    "contractAddress": "0x...",
-    "transactionHash": "0x...",
-    ...
-  },
-  "postDeploymentCall": {
-    "success": true,
-    "methodName": "initialize",
-    "methodArgs": [100],
-    "transactionHash": "0x...",
-    "blockNumber": "12346",
-    "gasUsed": "50000",
-    "status": "success"
-  },
-  "abi": [...]
-}
-```
-
-**Returns (deployment successful, method call failed)**:
-```javascript
-{
-  "success": false,
-  "message": "Contract deployed successfully at 0x..., but post-deployment method call failed",
-  "compilation": { "warnings": [] },
-  "deployment": {
-    "success": true,
-    "contractAddress": "0x...",
-    "transactionHash": "0x...",
-    ...
-  },
-  "postDeploymentCall": {
-    "success": false,
-    "methodName": "initialize",
-    "methodArgs": [100],
-    "error": "execution reverted: ...",
-    "details": "..."
-  },
-  "abi": [...]
-}
-```
-
-**Example (deploy only)**:
-```javascript
-{
-  sources: {
-    "SimpleStorage.sol": {
-      content: "contract SimpleStorage { ... }"
-    }
-  },
-  contractName: "SimpleStorage",
-  contractFile: "SimpleStorage.sol",
-  constructorArgs: [42],
-  network: "base-sepolia"
-}
-```
-
-**Example (deploy and call method)**:
-```javascript
-{
-  sources: {
-    "SimpleStorage.sol": {
-      content: "contract SimpleStorage { ... }"
-    }
-  },
-  contractName: "SimpleStorage",
-  contractFile: "SimpleStorage.sol",
-  constructorArgs: [42],
-  network: "base-sepolia",
-  postDeploymentCall: {
-    methodName: "set",
-    methodArgs: [100]
-  }
-}
-```
-
-**How it works**:
-1. Server estimates gas cost and calculates total payment required
-2. Client pays dynamic amount via X402
-3. Server verifies payment on-chain
-4. Server compiles the contract
-5. Server deploys using its own wallet (SERVER_DEPLOYER_PRIVATE_KEY)
-6. (Optional) Server calls the specified method on the deployed contract
-7. Server pays all gas fees (covered by client payment)
-8. Server returns contract address, deployment details, and method call results
-
-**Flow and Error Handling**:
-- If gas estimation fails → falls back to default 0.05 USDC
-- If compilation fails → deployment does not proceed
-- If deployment fails → method call does not proceed
-- If method call fails → deployment details are still returned with clear error message
-- All transaction details (hashes, gas used, block numbers) are included in the response
-
-**Dynamic Pricing Benefits**:
-- Pay only for actual gas used (fair pricing based on real costs)
-- Automatic adjustment based on network gas prices
-- Transparent gas estimation shown before payment
-- 20% buffer ensures transaction won't fail due to gas price fluctuations
-- 30% service fee on gas costs covers operational overhead
-- 0.05 USDC base fee ensures service viability for all deployments
+> 📖 **For detailed usage examples and tool specifications, see [USAGE.md](USAGE.md) and [API_REFERENCE.md](API_REFERENCE.md)**
 
 ## Network Details
 
