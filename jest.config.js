@@ -5,6 +5,6 @@ export default {
     '**/tests/**/*.e2e.test.js',
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
-  testTimeout: 60000,
+  testTimeout: 180000, // 3 minutes for multi-network deployment tests
   verbose: true,
 };
