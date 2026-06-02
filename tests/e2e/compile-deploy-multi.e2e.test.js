@@ -302,7 +302,7 @@ contract Counter {
             methodArgs: [5]
           }
         }
-      }, { timeout: 180000 }); // 3 minutes for multi-network deployment with post-deployment calls
+      }, undefined, { timeout: 180000 }); // 3 minutes for multi-network deployment with post-deployment calls
 
       const deploymentResult = JSON.parse(result.content[0].text);
 
@@ -565,7 +565,7 @@ library MathLib {
           },
           networks: ["base-sepolia", "sepolia"]
         }
-      }, { timeout: 180000 }); // 3 minutes for multi-network deployment with dependencies
+      }, undefined, { timeout: 180000 }); // 3 minutes for multi-network deployment with dependencies
 
       const deploymentResult = JSON.parse(result.content[0].text);
 
