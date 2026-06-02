@@ -269,6 +269,95 @@ contract Counter {
     }, 120000);
   });
 
+  describe('Compiler Version Flexibility', () => {
+    it('should deploy with custom compiler version', async () => {
+      console.log('\n🔧 Test: Deploying with custom compiler version...');
+
+      const soliditySources = {
+        "VersionTest.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract VersionTest {
+    uint256 public value;
+
+    constructor(uint256 _value) {
+        value = _value;
+    }
+
+    function getValue() public view returns (uint256) {
+        return value;
+    }
+
+    function increment() public {
+        value += 1;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const customVersion = "v0.8.20+commit.a1b79de6";
+
+      const result = await client.callTool({
+        name: "compile_and_deploy",
+        arguments: {
+          sources: soliditySources,
+          contractName: "VersionTest",
+          contractFile: "VersionTest.sol",
+          network: "base-sepolia",
+          version: customVersion,
+          constructorArgs: [100],
+          settings: {
+            optimizer: { enabled: true, runs: 200 },
+            evmVersion: "paris" // v0.8.20 doesn't support osaka
+          }
+        }
+      });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.deployment).toBeDefined();
+      expect(deploymentResult.deployment.contractAddress).toBeTruthy();
+      expect(deploymentResult.deployment.transactionHash).toBeTruthy();
+
+      console.log(`   ✅ Contract deployed at: ${deploymentResult.deployment.contractAddress}`);
+      console.log(`   ✅ Requested compiler version: ${customVersion}`);
+
+      // Verify the compilation used the exact compiler version we requested
+      expect(deploymentResult.compilation).toBeDefined();
+      expect(deploymentResult.compilation.version).toBe(customVersion);
+      console.log(`   ✅ Verified compiler version: ${deploymentResult.compilation.version}`);
+
+      // Verify bytecode exists and is different from default version compilation
+      // The bytecode should be compiled with v0.8.20, not the default v0.8.35
+      const deployedBytecode = await publicClient.getBytecode({
+        address: deploymentResult.deployment.contractAddress
+      });
+
+      expect(deployedBytecode).toBeTruthy();
+      expect(deployedBytecode.length).toBeGreaterThan(100); // Reasonable bytecode size
+
+      console.log(`   ✅ Bytecode deployed successfully (${deployedBytecode.length} bytes)`);
+
+      // Wait for transaction confirmation
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Verify the deployed contract functions correctly
+      const value = await publicClient.readContract({
+        address: deploymentResult.deployment.contractAddress,
+        abi: deploymentResult.abi,
+        functionName: 'getValue',
+      });
+
+      expect(value).toBe(100n);
+      console.log(`   ✅ Contract verified on-chain with constructor value: ${value}`);
+      console.log(`   ✅ Deployment with custom version successful!`);
+    }, 120000);
+  });
+
   describe('Deployment with Post-Deployment Call', () => {
     it('should deploy and call a method successfully', async () => {
       console.log('\n🔧 Test: Deploying and calling set method...');

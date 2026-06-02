@@ -11,7 +11,7 @@ export function registerAnalyzeWithSlitherTool(mcp: FastMCP) {
     sources: z.record(z.string(), z.object({
       content: z.string()
     })).describe("Object with contract filenames as keys and their content"),
-    version: z.string().optional().describe("Solidity compiler version (e.g., '0.8.28+commit.7893614a'). Defaults to 0.8.28"),
+    version: z.string().optional().describe("Solidity compiler version (e.g., '0.8.35+commit.47b9dedd'). If not specified, uses the default version."),
     detectors: z.array(z.string()).optional().describe("Optional list of specific detectors to run (e.g., ['reentrancy-eth', 'tx-origin']). Filters results client-side."),
     excludeInformational: z.boolean().optional().describe("Exclude informational severity findings (default: false)"),
     excludeLow: z.boolean().optional().describe("Exclude low severity findings (default: false)")

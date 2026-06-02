@@ -358,6 +358,130 @@ contract Counter {
     }, 180000); // Increased timeout for multi-network deployment with post-deployment calls
   });
 
+  describe('Compiler Version Flexibility', () => {
+    it('should deploy to multiple networks with custom compiler version', async () => {
+      console.log('\n🔧 Test: Deploying to multiple networks with custom compiler version...');
+
+      const soliditySources = {
+        "VersionTestMulti.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract VersionTestMulti {
+    uint256 public value;
+    uint256 public counter;
+
+    constructor(uint256 _value) {
+        value = _value;
+        counter = 0;
+    }
+
+    function getValue() public view returns (uint256) {
+        return value;
+    }
+
+    function increment() public {
+        counter += 1;
+    }
+
+    function getCounter() public view returns (uint256) {
+        return counter;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const customVersion = "v0.8.20+commit.a1b79de6";
+
+      const result = await client.callTool({
+        name: "compile_and_deploy_multi_network",
+        arguments: {
+          sources: soliditySources,
+          contractName: "VersionTestMulti",
+          contractFile: "VersionTestMulti.sol",
+          networks: ["base-sepolia", "sepolia"],
+          version: customVersion,
+          constructorArgs: [42],
+          settings: {
+            optimizer: { enabled: true, runs: 200 },
+            evmVersion: "paris" // v0.8.20 doesn't support osaka
+          }
+        }
+      }, undefined, { timeout: 180000 });
+
+      const deploymentResult = JSON.parse(result.content[0].text);
+
+      expect(deploymentResult.success).toBe(true);
+      expect(deploymentResult.deployments.length).toBe(2);
+
+      // Verify both networks are present
+      const deployedNetworks = deploymentResult.deployments.map(d => d.network);
+      expect(deployedNetworks).toContain('base-sepolia');
+      expect(deployedNetworks).toContain('sepolia');
+
+      console.log(`   ✅ Requested compiler version: ${customVersion}`);
+
+      // Verify the compilation used the exact compiler version we requested
+      expect(deploymentResult.compilation).toBeDefined();
+      expect(deploymentResult.compilation.version).toBe(customVersion);
+      console.log(`   ✅ Verified compiler version: ${deploymentResult.compilation.version}`);
+
+      // Verify all deployments succeeded and check bytecode
+      for (const deployment of deploymentResult.deployments) {
+        expect(deployment.success).toBe(true);
+        expect(deployment.contractAddress).toBeTruthy();
+        console.log(`   ✅ Deployed to ${deployment.network} at: ${deployment.contractAddress}`);
+      }
+
+      // Wait for transactions to be fully propagated
+      await new Promise(resolve => setTimeout(resolve, 15000));
+
+      // Verify contract on base-sepolia
+      const baseSepoliaDeployment = deploymentResult.deployments.find(d => d.network === 'base-sepolia');
+      if (baseSepoliaDeployment) {
+        const bytecode = await publicClient.getBytecode({
+          address: baseSepoliaDeployment.contractAddress
+        });
+
+        expect(bytecode).toBeTruthy();
+        expect(bytecode.length).toBeGreaterThan(100);
+
+        const value = await publicClient.readContract({
+          address: baseSepoliaDeployment.contractAddress,
+          abi: deploymentResult.abi,
+          functionName: 'getValue',
+        });
+
+        expect(value).toBe(42n);
+        console.log(`   ✅ base-sepolia: bytecode=${bytecode.length} bytes, value=${value}`);
+      }
+
+      // Verify contract on sepolia
+      const sepoliaDeployment = deploymentResult.deployments.find(d => d.network === 'sepolia');
+      if (sepoliaDeployment) {
+        const bytecode = await sepoliaPublicClient.getBytecode({
+          address: sepoliaDeployment.contractAddress
+        });
+
+        expect(bytecode).toBeTruthy();
+        expect(bytecode.length).toBeGreaterThan(100);
+
+        const value = await sepoliaPublicClient.readContract({
+          address: sepoliaDeployment.contractAddress,
+          abi: deploymentResult.abi,
+          functionName: 'getValue',
+        });
+
+        expect(value).toBe(42n);
+        console.log(`   ✅ sepolia: bytecode=${bytecode.length} bytes, value=${value}`);
+      }
+
+      console.log(`   ✅ Multi-network deployment with custom version successful!`);
+    }, 180000);
+  });
+
   describe('Error Handling', () => {
     it('should handle compilation errors gracefully', async () => {
       console.log('\n🔧 Test: Handling compilation errors...');

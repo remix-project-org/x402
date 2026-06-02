@@ -343,6 +343,7 @@ Compile and deploy a smart contract to a single network using the server's deleg
   contractFile: string,
   network: string,
   constructorArgs?: Array<any>,
+  version?: string,
   settings?: {
     optimizer?: {
       enabled: boolean,
@@ -368,6 +369,7 @@ Compile and deploy a smart contract to a single network using the server's deleg
 | `contractFile` | string | Yes | Filename containing the contract |
 | `network` | string | Yes | Network to deploy to (any network supported by viem/chains) |
 | `constructorArgs` | Array | No | Constructor arguments for the contract |
+| `version` | string | No | Solidity compiler version (e.g., "v0.8.20+commit.a1b79de6") (default: "v0.8.35+commit.47b9dedd") |
 | `settings` | Object | No | Compiler settings (same as compile_solidity) |
 | `value` | string | No | Value in wei to send with deployment (for payable constructors) |
 | `postDeploymentCall` | Object | No | Optional method to call after deployment |
@@ -389,6 +391,7 @@ Note: The tool supports any network from viem/chains. On mainnet launch, additio
 {
   success: boolean,
   compilation?: {
+    version: string,
     warnings: Array<any>,
     settings: {
       optimizer: {
@@ -433,6 +436,7 @@ Note: The tool supports any network from viem/chains. On mainnet launch, additio
 |-------|------|-------------|
 | `success` | boolean | Whether overall operation succeeded |
 | `compilation` | Object | Compilation warnings and settings used |
+| `compilation.version` | string | Solidity compiler version used for compilation |
 | `deployment` | Object | Deployment details and transaction info |
 | `deployment.contractAddress` | string | Deployed contract address |
 | `deployment.transactionHash` | string | Deployment transaction hash |
@@ -516,6 +520,7 @@ Compile once and deploy to multiple networks simultaneously.
   contractFile: string,
   networks: Array<string>,
   constructorArgs?: Array<any>,
+  version?: string,
   settings?: {
     optimizer?: {
       enabled: boolean,
@@ -539,6 +544,7 @@ Compile once and deploy to multiple networks simultaneously.
 | `contractFile` | string | Yes | Filename containing the contract |
 | `networks` | Array<string> | Yes | List of networks to deploy to |
 | `constructorArgs` | Array | No | Constructor arguments (same for all networks) |
+| `version` | string | No | Solidity compiler version (e.g., "v0.8.20+commit.a1b79de6") (default: "v0.8.35+commit.47b9dedd") |
 | `settings` | Object | No | Compiler settings (same as compile_solidity) |
 | `postDeploymentCall` | Object | No | Method to call after each deployment |
 
@@ -556,6 +562,7 @@ Note: Any network from viem/chains is supported. More networks available on main
 {
   success: boolean,
   compilation?: {
+    version: string,
     warnings: Array<any>
   },
   deployments: Array<{
@@ -596,6 +603,7 @@ Note: Any network from viem/chains is supported. More networks available on main
 |-------|------|-------------|
 | `success` | boolean | Whether all deployments succeeded |
 | `compilation` | Object | Compilation warnings (compiled once) |
+| `compilation.version` | string | Solidity compiler version used for compilation |
 | `deployments` | Array | Array of deployment results per network |
 | `deployments[].network` | string | Network name |
 | `deployments[].success` | boolean | Whether this network deployment succeeded |

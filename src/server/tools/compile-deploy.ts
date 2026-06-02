@@ -33,6 +33,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
     contractName: z.string().describe("Name of the main contract to deploy (e.g., 'MyContract')"),
     contractFile: z.string().describe("Filename containing the contract to deploy (e.g., 'MyContract.sol')"),
     constructorArgs: z.array(z.any()).optional().describe("Optional constructor arguments for deployment"),
+    version: z.string().optional().describe("Solidity compiler version (e.g., 'v0.8.20+commit.a1b79de6'). If not specified, uses the default version."),
     settings: z.object({
       optimizer: z.object({
         enabled: z.boolean().optional(),
@@ -85,7 +86,8 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
             compiler.compile(args.sources, "");
           });
 
-          compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
+          const compilerVersion = args.version ?? TOOL_CONFIG.compiler.version;
+          compiler.loadRemoteVersion(compilerVersion);
         });
 
         const contractData = compilationResult.contracts[args.contractFile]?.[args.contractName];
@@ -252,6 +254,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
     contractName: string,
     contractFile: string,
     constructorArgs?: any[],
+    version?: string,
     settings?: any,
     network: string,
     value?: string,
@@ -271,6 +274,8 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
         const content = args.sources[importPath]?.content || "";
         cb(null, { content });
       });
+
+      const compilerVersion = args.version ?? TOOL_CONFIG.compiler.version;
 
       const compilationResult: any = await new Promise((resolve, reject) => {
         compiler.set("evmVersion", args.settings?.evmVersion ?? TOOL_CONFIG.compiler.defaultSettings.evmVersion);
@@ -297,7 +302,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
           compiler.compile(args.sources, "");
         });
 
-        compiler.loadRemoteVersion(TOOL_CONFIG.compiler.version);
+        compiler.loadRemoteVersion(compilerVersion);
       });
 
       if (!compilationResult.success) {
@@ -398,6 +403,7 @@ export function registerCompileAndDeploymentTool(mcp: FastMCP) {
       const result: any = {
         success: true,
         compilation: {
+          version: compilerVersion,
           warnings: compilationResult.errors || [],
           settings: {
             optimizer: {
