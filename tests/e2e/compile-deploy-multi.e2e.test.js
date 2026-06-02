@@ -302,7 +302,7 @@ contract Counter {
             methodArgs: [5]
           }
         }
-      });
+      }, { timeout: 180000 }); // 3 minutes for multi-network deployment with post-deployment calls
 
       const deploymentResult = JSON.parse(result.content[0].text);
 
@@ -355,7 +355,7 @@ contract Counter {
 
       expect(sepoliaCount).toBe(5n);
       console.log(`   ✅ Counter verified on sepolia: ${sepoliaCount}`);
-    }, 120000);
+    }, 180000); // Increased timeout for multi-network deployment with post-deployment calls
   });
 
   describe('Error Handling', () => {
@@ -565,7 +565,7 @@ library MathLib {
           },
           networks: ["base-sepolia", "sepolia"]
         }
-      });
+      }, { timeout: 180000 }); // 3 minutes for multi-network deployment with dependencies
 
       const deploymentResult = JSON.parse(result.content[0].text);
 
@@ -607,6 +607,6 @@ library MathLib {
 
       expect(sepoliaResult).toBe(30n);
       console.log(`   ✅ Contract with library verified on sepolia, result: ${sepoliaResult}`);
-    }, 120000);
+    }, 180000); // Increased timeout for multi-network deployment with dependencies
   });
 });
