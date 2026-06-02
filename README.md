@@ -74,7 +74,8 @@ yarn install
 ### Tool Configuration
 
 All tool settings are centralized in `src/server/config/tools.ts`:
-- Compiler versions (currently v0.8.35)
+- Default compiler version (currently v0.8.35+commit.47b9dedd)
+  - Note: Users can specify custom versions via the `version` parameter
 - EVM version (currently osaka)
 - Pricing for each tool
 - Gas estimation parameters

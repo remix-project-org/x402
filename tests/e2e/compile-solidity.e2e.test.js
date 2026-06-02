@@ -306,6 +306,105 @@ library MathLib {
     });
   });
 
+  describe('Compiler Version Flexibility', () => {
+    it('should compile with default compiler version when not specified', async () => {
+      console.log('\n🔧 Test: Compiling with default compiler version...');
+
+      const expectedDefaultVersion = "v0.8.35+commit.47b9dedd";
+
+      const soliditySources = {
+        "DefaultVersion.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.35;
+
+contract DefaultVersion {
+    uint256 public value;
+
+    function setValue(uint256 _value) public {
+        value = _value;
+    }
+}
+          `.trim()
+        }
+      };
+
+      const result = await client.callTool({
+        name: "compile_solidity",
+        arguments: {
+          sources: soliditySources,
+          settings: {
+            optimizer: { enabled: true, runs: 200 }
+          }
+        }
+      });
+
+      const compilationResult = JSON.parse(result.content[0].text);
+
+      expect(compilationResult.success).toBe(true);
+      expect(compilationResult.version).toBe(expectedDefaultVersion);
+      expect(compilationResult.contracts['DefaultVersion.sol']).toBeDefined();
+      expect(compilationResult.contracts['DefaultVersion.sol'].DefaultVersion).toBeDefined();
+
+      console.log(`✅ Compilation with default version ${expectedDefaultVersion} successful!`);
+    });
+
+    it('should compile with custom compiler version', async () => {
+      console.log('\n🔧 Test: Compiling with custom compiler version...');
+
+      const soliditySources = {
+        "CustomVersion.sol": {
+          content: `
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract CustomVersion {
+    string public name;
+
+    constructor() {
+        name = "Custom Version Test";
+    }
+
+    function setName(string memory _name) public {
+        name = _name;
+    }
+}
+          `.trim()
+        }
+      };
+
+      // Use an older Solidity version
+      const customVersion = "v0.8.20+commit.a1b79de6";
+
+      const result = await client.callTool({
+        name: "compile_solidity",
+        arguments: {
+          sources: soliditySources,
+          version: customVersion,
+          settings: {
+            optimizer: { enabled: true, runs: 200 },
+            evmVersion: "paris"
+          }
+        }
+      });
+
+      const compilationResult = JSON.parse(result.content[0].text);
+
+      expect(compilationResult.success).toBe(true);
+      expect(compilationResult.version).toBe(customVersion);
+      expect(compilationResult.contracts['CustomVersion.sol']).toBeDefined();
+      expect(compilationResult.contracts['CustomVersion.sol'].CustomVersion).toBeDefined();
+
+      const contract = compilationResult.contracts['CustomVersion.sol'].CustomVersion;
+      expect(contract.abi).toBeDefined();
+      expect(contract.evm).toBeDefined();
+      expect(contract.evm.bytecode.object).toBeTruthy();
+
+      console.log(`✅ Compilation with custom version ${customVersion} verified!`);
+    });
+
+  });
+
   describe('Error Handling', () => {
     it('should handle compilation errors gracefully', async () => {
       console.log('\n🔧 Test: Handling compilation errors...');
