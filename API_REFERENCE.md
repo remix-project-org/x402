@@ -26,6 +26,7 @@ Compile Solidity smart contracts using the Remix compiler.
       content: string
     }
   },
+  version?: string,
   settings?: {
     optimizer?: {
       enabled: boolean,
@@ -42,11 +43,12 @@ Compile Solidity smart contracts using the Remix compiler.
 |-----------|------|----------|-------------|
 | `sources` | Object | Yes | Map of filename to source code content |
 | `sources[filename].content` | string | Yes | Solidity source code |
+| `version` | string | No | Solidity compiler version (e.g., "v0.8.20+commit.a1b79de6") (default: "v0.8.35+commit.47b9dedd") |
 | `settings` | Object | No | Compiler settings |
 | `settings.optimizer` | Object | No | Optimizer configuration |
 | `settings.optimizer.enabled` | boolean | No | Enable optimizer (default: false) |
 | `settings.optimizer.runs` | number | No | Optimizer runs (default: 200) |
-| `settings.evmVersion` | string | No | EVM version (default: "paris") |
+| `settings.evmVersion` | string | No | EVM version (default: "osaka") |
 
 #### Supported EVM Versions
 
@@ -113,7 +115,8 @@ Compile Solidity smart contracts using the Remix compiler.
       runs: number
     },
     evmVersion: string
-  }
+  },
+  version?: string
 }
 ```
 
@@ -132,6 +135,7 @@ Compile Solidity smart contracts using the Remix compiler.
 | `sources` | Object | Source file information with AST (only if successful) |
 | `errors` | Array | Compilation errors and warnings (if any) |
 | `settings` | Object | Compiler settings used (only if successful) |
+| `version` | string | Solidity compiler version used |
 
 ### Example
 
@@ -156,6 +160,7 @@ contract MyToken {
         `
       }
     },
+    version: "v0.8.20+commit.a1b79de6", // Optional: specify compiler version
     settings: {
       optimizer: {
         enabled: true,
@@ -167,6 +172,7 @@ contract MyToken {
 });
 
 const output = JSON.parse(result.content[0].text);
+console.log('Compiler version:', output.version);
 console.log('ABI:', output.contracts['MyToken.sol'].MyToken.abi);
 console.log('Bytecode:', output.contracts['MyToken.sol'].MyToken.evm.bytecode.object);
 ```
