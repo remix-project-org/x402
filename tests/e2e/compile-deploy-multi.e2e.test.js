@@ -435,7 +435,8 @@ contract VersionTestMulti {
         console.log(`   ✅ Deployed to ${deployment.network} at: ${deployment.contractAddress}`);
       }
 
-      // Wait for transactions to be fully propagated
+      // Wait for transactions to be fully propagated before reading bytecode
+      console.log(`   ⏳ Waiting for transactions to propagate...`);
       await new Promise(resolve => setTimeout(resolve, 15000));
 
       // Verify contract on base-sepolia

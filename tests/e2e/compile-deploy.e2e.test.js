@@ -331,6 +331,10 @@ contract VersionTest {
       expect(deploymentResult.compilation.version).toBe(customVersion);
       console.log(`   ✅ Verified compiler version: ${deploymentResult.compilation.version}`);
 
+      // Wait for transaction to be fully propagated before reading bytecode
+      console.log(`   ⏳ Waiting for transaction to propagate...`);
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
       // Verify bytecode exists and is different from default version compilation
       // The bytecode should be compiled with v0.8.20, not the default v0.8.35
       const deployedBytecode = await publicClient.getBytecode({
@@ -341,9 +345,6 @@ contract VersionTest {
       expect(deployedBytecode.length).toBeGreaterThan(100); // Reasonable bytecode size
 
       console.log(`   ✅ Bytecode deployed successfully (${deployedBytecode.length} bytes)`);
-
-      // Wait for transaction confirmation
-      await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify the deployed contract functions correctly
       const value = await publicClient.readContract({
