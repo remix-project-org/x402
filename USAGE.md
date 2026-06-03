@@ -152,7 +152,9 @@ const result = await client.callTool({
 
 ### Quick Start Script
 
-Here's a complete working example:
+> **💡 Prefer using Claude Desktop?** All these examples can work automatically through Claude - see **[CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md)**
+
+Here's a complete working example for programmatic use:
 
 ```javascript
 import { createMCPClient } from './src/lib/index.js';

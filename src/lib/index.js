@@ -5,7 +5,8 @@ import { Wallet } from "./wallet.js";
 import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
 
-dotenv.config();
+// Suppress dotenv decorative output
+dotenv.config({ quiet: true });
 
 /**
  * Creates and configures an MCP client with x402 payment support using AccountWallet
@@ -41,7 +42,7 @@ export function createMCPClient(serverUrl, clientInfo = { name: "MyMCPClient", v
   // Create transport
   const transport = new StreamableHTTPClientTransport(new URL(serverUrl));
 
-  console.log(`💼 Wallet address: ${wallet.address}`);
+  console.error(`💼 Wallet address: ${wallet.address}`);
 
   return { client, transport, treasurer, wallet };
 }
