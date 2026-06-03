@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 /**
  * Naive Treasurer that only approves payments without settling them on-chain.

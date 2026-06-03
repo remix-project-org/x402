@@ -2,7 +2,7 @@ import { settle } from "x402/facilitator";
 import { createSigner } from "x402/types";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 /**
  * Treasurer that auto-approves and IMMEDIATELY settles payments on-chain
