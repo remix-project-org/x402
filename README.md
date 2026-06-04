@@ -14,7 +14,7 @@ This is a **server-side implementation** of an x402-enabled MCP server that prov
 
 - 📖 **[Usage Guide](USAGE.md)** - Getting started, wallet setup, payment flow, and examples
 - 📚 **[API Reference](API_REFERENCE.md)** - Complete API specs for all 4 tools
-- 🖥️ **[Claude Desktop Setup](CLAUDE_DESKTOP_SETUP.md)** - Connect this server to Claude Desktop with automatic x402 payments
+- 🖥️ **[Claude Setup Guide](CLAUDE_SETUP.md)** - Connect to Claude Desktop or Claude Code CLI with automatic x402 payments
 
 ## Features
 

@@ -152,7 +152,7 @@ const result = await client.callTool({
 
 ### Quick Start Script
 
-> **💡 Prefer using Claude Desktop?** All these examples can work automatically through Claude - see **[CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md)**
+> **💡 Prefer using Claude?** All these examples can work automatically through Claude Desktop or Claude Code CLI - see **[CLAUDE_SETUP.md](CLAUDE_SETUP.md)**
 
 Here's a complete working example for programmatic use:
 

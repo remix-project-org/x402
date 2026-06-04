@@ -701,7 +701,7 @@ All tools may return errors in various formats:
 ```
 
 > **📖 Getting Started?**
-> - For usage through Claude Desktop: **[CLAUDE_DESKTOP_SETUP.md](CLAUDE_DESKTOP_SETUP.md)**
+> - For usage through Claude Desktop or Claude Code CLI: **[CLAUDE_SETUP.md](CLAUDE_SETUP.md)**
 > - For usage examples and guides: **[USAGE.md](USAGE.md)**
 
 

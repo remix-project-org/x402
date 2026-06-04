@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * Claude Code Client for Remix X402 MCP Server
+ * Unified Claude Client for Remix X402 MCP Server
  *
- * This script bridges Claude Code CLI (stdio transport) to the Remix X402 MCP server
- * (HTTP transport) and handles x402 micropayments automatically.
+ * This script bridges both Claude Desktop and Claude Code CLI (stdio transport)
+ * to the Remix X402 MCP server (HTTP transport) and handles x402 micropayments
+ * automatically.
  *
  * Architecture:
- * Claude Code CLI (stdio) ←→ This Client ←→ Remix X402 Server (HTTP+x402)
+ * Claude Desktop/Code (stdio) ←→ This Client ←→ Remix X402 Server (HTTP+x402)
+ *
+ * Works with:
+ * - Claude Desktop (GUI application)
+ * - Claude Code CLI (terminal interface)
  *
  * Required: EVM_PRIVATE_KEY environment variable with Base Sepolia wallet
  */
@@ -15,7 +20,7 @@
 // ============================================================================
 // Stdout Filtering - MUST be done BEFORE any imports
 // ============================================================================
-// Claude Code expects only JSON-RPC messages on stdout.
+// Claude Desktop/Code expect only JSON-RPC messages on stdout.
 // Redirect everything else to stderr to prevent parsing errors.
 
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -71,7 +76,7 @@ async function main() {
   try {
     // Create MCP client with x402 payment support
     const { client, transport } = createMCPClient(SERVER_URL, {
-      name: 'claude-code',
+      name: 'claude-remix-x402-client',
       version: '1.0.0'
     });
 
@@ -79,13 +84,13 @@ async function main() {
     await client.connect(transport);
     console.error('Connected to Remix X402 MCP Server');
 
-    // Set up stdio interface to read from Claude Code
+    // Set up stdio interface to read from Claude Desktop/Code
     const rl = createInterface({
       input: process.stdin,
       terminal: false
     });
 
-    // Handle incoming JSON-RPC messages from Claude Code
+    // Handle incoming JSON-RPC messages from Claude
     rl.on('line', async (line) => {
       try {
         const message = JSON.parse(line);
