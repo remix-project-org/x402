@@ -42,6 +42,7 @@ export function createMCPClient(serverUrl, clientInfo = { name: "MyMCPClient", v
   // Create transport
   const transport = new StreamableHTTPClientTransport(new URL(serverUrl));
 
+  // Changed to console.error to output to stderr (for Claude Desktop client compatibility)
   console.error(`💼 Wallet address: ${wallet.address}`);
 
   return { client, transport, treasurer, wallet };
