@@ -9,8 +9,8 @@ import {
 import { getActiveNetwork, getSupportedNetworks } from "./config/network.js";
 import { TOOL_CONFIG, usdcToUsd } from "./config/tools.js";
 
-// Load environment variables (quiet mode to suppress decorative output)
-dotenv.config({ quiet: true });
+// Load environment variables
+dotenv.config();
 
 // Create MCP server instance
 const mcp = new FastMCP({
