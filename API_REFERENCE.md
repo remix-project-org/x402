@@ -61,8 +61,9 @@ Compile Solidity smart contracts using the Remix compiler.
 - `istanbul`
 - `berlin`
 - `london`
-- `paris` (default)
+- `paris`
 - `shanghai`
+- `osaka` (default)
 
 ### Output
 
