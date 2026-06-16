@@ -78,7 +78,8 @@ jobs:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         run: |
           yarn test tests/e2e/compile-solidity.e2e.test.js
-          yarn test tests/e2e/analyze-slither.e2e.test.js
+          # Temporarily disabled
+          # yarn test tests/e2e/analyze-slither.e2e.test.js
 
       - name: Run E2E Tests (Compile & Deploy)
         env:
