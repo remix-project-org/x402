@@ -8,6 +8,7 @@ import {
 } from "./tools/index.js";
 import { getActiveNetwork, getSupportedNetworks } from "./config/network.js";
 import { TOOL_CONFIG, usdcToUsd } from "./config/tools.js";
+import { startDiscoveryServer, setupGracefulShutdown } from "./discovery.js";
 
 // Load environment variables
 dotenv.config();
@@ -54,3 +55,7 @@ console.log(`   - analyze_with_slither ($${usdcToUsd(TOOL_CONFIG.payments.analyz
 console.log(`   - compile_and_deploy (dynamic pricing, base: $${TOOL_CONFIG.payments.compileAndDeploy.baseFeeUsd.toFixed(2)} USDC + gas + ${TOOL_CONFIG.payments.compileAndDeploy.serviceFeePercentage * 100}% fee)`);
 console.log(`   - compile_and_deploy_multi_network (dynamic pricing for multiple networks)`);
 console.log(`\n💡 Available networks: ${getSupportedNetworks().join(", ")}`);
+
+// Start the Bazaar discovery server
+const discoveryServer = startDiscoveryServer();
+setupGracefulShutdown(discoveryServer);

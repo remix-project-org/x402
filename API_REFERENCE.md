@@ -2,12 +2,15 @@
 
 This document provides detailed API specifications for all tools available on the Remix x402 MCP Server.
 
+**🔍 Discovery**: This server is indexed on the [x402 Bazaar](https://agentic.market) with full metadata for AI agent discovery. View the discovery endpoint at `http://localhost:8001/discovery` when the server is running.
+
 ## Table of Contents
 
 1. [compile_solidity](#1-compile_solidity)
 2. [analyze_with_slither](#2-analyze_with_slither)
 3. [compile_and_deploy](#3-compile_and_deploy)
 4. [compile_and_deploy_multi_network](#4-compile_and_deploy_multi_network)
+5. [Discovery Endpoint](#discovery-endpoint)
 
 ---
 
@@ -757,8 +760,99 @@ Currently, there are no rate limits enforced. However, please follow fair use gu
 
 ---
 
+## Discovery Endpoint
+
+### GET /discovery
+
+Returns Bazaar-compatible metadata for all tools on this server. Used by the x402 Bazaar to index and catalog services.
+
+**Endpoint**: `http://localhost:8001/discovery`
+
+**Response Format**:
+
+```json
+{
+  "version": 2,
+  "resources": [
+    {
+      "resource": "mcp://localhost:8000/compile_solidity",
+      "type": "mcp",
+      "accepts": [{
+        "asset": "USDC",
+        "amount": "10000",
+        "network": "eip155:84532",
+        "payTo": "0x...",
+        "scheme": "exact"
+      }],
+      "extensions": {
+        "bazaar": {
+          "info": {
+            "input": {
+              "type": "mcp",
+              "toolName": "compile_solidity",
+              "description": "Compile Solidity smart contracts...",
+              "inputSchema": { /* JSON Schema */ },
+              "example": { /* Example arguments */ }
+            },
+            "output": {
+              "type": "json",
+              "example": { /* Example response */ }
+            }
+          }
+        }
+      },
+      "serviceName": "Remix Compiler",
+      "tags": ["solidity", "compiler", "blockchain", "smart-contracts"]
+    }
+    // ... metadata for all 4 tools
+  ],
+  "lastUpdated": "2026-06-26T...",
+  "server": {
+    "name": "remix-x402-server",
+    "version": "1.0.0",
+    "endpoint": "http://localhost:8000/mcp",
+    "network": "base-sepolia",
+    "chainId": 84532
+  }
+}
+```
+
+### Usage
+
+**View metadata locally**:
+```bash
+curl http://localhost:8001/discovery | jq
+```
+
+**Validate on agentic.market**:
+1. Deploy your server with a public URL
+2. Go to https://agentic.market/validate
+3. Enter your discovery endpoint URL
+4. The validator checks metadata format and indexing requirements
+
+**For CDP Facilitator indexing**:
+- The CDP Facilitator automatically catalogs your service on first payment settlement
+- Metadata is extracted from the `/discovery` endpoint
+- Services must have `PAY_TO_ADDRESS` configured for proper indexing
+
+### Additional Endpoints
+
+**GET /** - Server information and available endpoints
+
+**GET /health** - Health check endpoint
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-06-26T...",
+  "service": "x402-discovery"
+}
+```
+
+---
+
 ## Support
 
 For issues, questions, or feature requests:
 - **GitHub**: [github.com/remix-project-org/x402](https://github.com/remix-project-org/x402)
 - **Documentation**: See README.md and USAGE.md
+- **Bazaar**: [agentic.market](https://agentic.market) - Discover and validate x402 services
