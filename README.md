@@ -30,26 +30,30 @@ This is a **server-side implementation** of an x402-enabled MCP server that prov
 - **Delegated Deployment**: Server deploys contracts without requiring client private keys
 - **Dynamic Gas Pricing**: Fair, transparent gas-based pricing for deployments
 - **MCP Integration**: Built with Ampersend SDK for seamless payment-gated tools
+- **Bazaar Discovery**: Indexed on [agentic.market](https://agentic.market) with full metadata for AI agent discovery
 
 ## Architecture
 
 ### Server Implementation
 Modular MCP server implementation with payment-gated tools:
 - `src/server/` - Organized server architecture
-  - `index.ts` - Main entry point (36 lines)
+  - `index.ts` - Main entry point
+  - `discovery.ts` - Bazaar discovery HTTP server
   - `tools/` - Individual MCP tools
-    - `compile-solidity.ts` - Solidity compilation (83 lines)
-    - `analyze-slither.ts` - Security analysis via Slither (177 lines)
-    - `compile-deploy.ts` - Delegated deployment with dynamic gas-based pricing (320+ lines)
+    - `compile-solidity.ts` - Solidity compilation
+    - `analyze-slither.ts` - Security analysis via Slither
+    - `compile-deploy.ts` - Delegated deployment with dynamic gas-based pricing
     - `compile-deploy-multi.ts` - Multi-network deployment support
   - `utils/` - Shared utilities
-    - `payment.ts` - Payment verification utilities (70 lines)
+    - `payment.ts` - Payment verification utilities
   - `config/` - Configuration management
     - `network.ts` - Centralized network configuration for easy mainnet/testnet switching
     - `tools.ts` - Central tool configuration (compiler versions, pricing, gas settings)
+    - `bazaar.ts` - Bazaar discovery metadata for all tools
 - Verifies X402 payments on-chain before executing tools
 - Integrates with Remix API for Slither analysis
 - Provides Delegated Deployment Service for secure contract deployment
+- Exposes discovery endpoint for x402 Bazaar indexing
 - See `REFACTORING_SUMMARY.md` for detailed refactoring documentation
 
 ### Testing & Examples
@@ -99,7 +103,23 @@ yarn run build
 yarn build && yarn start
 ```
 
-The server will start on `http://localhost:8000/mcp`
+The server will start:
+- **MCP Server**: `http://localhost:8000/mcp` - Main MCP endpoint for tool execution
+- **Discovery Server**: `http://localhost:8001/discovery` - Bazaar discovery metadata endpoint
+
+### Discovery Endpoint
+
+The discovery endpoint exposes metadata for all tools in a format compatible with the x402 Bazaar:
+
+```bash
+# View discovery metadata
+curl http://localhost:8001/discovery
+```
+
+This endpoint is used by:
+- **agentic.market** - To index and validate your service
+- **CDP Facilitator** - To automatically catalog your tools
+- **AI agents** - To discover available tools and their capabilities
 
 ## Testing
 
@@ -170,6 +190,50 @@ Client                          Server
 - Transparent pricing: clients see exact costs before payment
 
 > 📖 **For detailed usage examples and tool specifications, see [USAGE.md](USAGE.md) and [API_REFERENCE.md](API_REFERENCE.md)**
+
+## Bazaar Discovery & Indexing
+
+This server is compatible with the **x402 Bazaar** discovery layer, making it discoverable on [agentic.market](https://agentic.market) and by AI agents.
+
+### Discovery Metadata
+
+The server exposes structured metadata at `http://localhost:8001/discovery` that includes:
+- **Tool specifications** - Input/output schemas with JSON Schema validation
+- **Pricing information** - Exact costs for each tool
+- **Payment requirements** - Network, USDC address, and payment scheme
+- **Service descriptions** - Natural language descriptions for semantic search
+- **Examples** - Sample inputs and outputs for each tool
+
+### How Discovery Works
+
+1. **Automatic Indexing**: Once you make a successful payment through the CDP Facilitator, your service is automatically cataloged
+2. **No Registration Required**: The CDP Facilitator extracts metadata from the `/discovery` endpoint
+3. **Searchable by AI Agents**: Services indexed on the Bazaar can be discovered by AI agents using semantic search
+4. **Quality Signals**: Your service visibility improves based on usage and quality
+
+### Validation
+
+To validate your endpoint is properly configured for the Bazaar:
+
+1. **Start the server**: `yarn build && yarn start`
+2. **Visit the validator**: Go to [https://agentic.market/validate](https://agentic.market/validate)
+3. **Enter your endpoint**: Use your public URL (e.g., `https://your-domain.com/discovery`)
+4. **Check results**: The validator will verify metadata format and indexing requirements
+
+### Environment Variables for Discovery
+
+Optional configuration for the discovery endpoint:
+
+```bash
+# Server base URL for resource identifiers (default: http://localhost:8000)
+SERVER_BASE_URL=https://your-domain.com
+
+# Discovery server port (default: 8001)
+DISCOVERY_PORT=8001
+
+# Payment receiving address (required for proper metadata)
+PAY_TO_ADDRESS=0xYourAddress
+```
 
 ## Network Details
 
