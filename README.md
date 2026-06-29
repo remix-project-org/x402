@@ -106,6 +106,7 @@ yarn build && yarn start
 The server will start:
 - **MCP Server**: `http://localhost:8000/mcp` - Main MCP endpoint for tool execution
 - **Discovery Server**: `http://localhost:8001/discovery` - Bazaar discovery metadata endpoint
+- **HTTP x402 Server** (optional): `http://localhost:8002` - REST endpoints with x402 protocol (requires `PAY_TO_ADDRESS`)
 
 ### Discovery Endpoint
 
