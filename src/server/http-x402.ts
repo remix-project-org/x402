@@ -37,25 +37,53 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
 }
 
 /**
- * Create x402 payment requirements
+ * Create x402 v2 payment required response
+ */
+function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string) {
+  const network = getActiveNetwork();
+  const payToAddress = process.env.PAY_TO_ADDRESS;
+
+  return {
+    x402Version: 2,
+    resource: {
+      url: resourceUrl,
+      description: description,
+      mimeType: "application/json",
+    },
+    accepts: [
+      {
+        asset: "USDC",
+        amount: amount,
+        network: `eip155:${network.chainId}`,
+        payTo: payToAddress,
+        scheme: "exact" as const,
+      },
+    ],
+  };
+}
+
+/**
+ * Create v2 payment requirements for header
  */
 function createPaymentRequirements(resource: string, amount: string) {
   const network = getActiveNetwork();
   const payToAddress = process.env.PAY_TO_ADDRESS;
 
   return {
-    scheme: "exact",
-    network: network.name,
-    maxAmountRequired: amount,
-    resource,
-    mimeType: "application/json",
-    payTo: payToAddress,
-    maxTimeoutSeconds: 300,
-    asset: network.usdcAddress,
-    extra: {
-      name: "USDC",
-      version: "2",
+    x402Version: 2,
+    resource: {
+      url: resource,
+      mimeType: "application/json",
     },
+    accepts: [
+      {
+        asset: "USDC",
+        amount: amount,
+        network: `eip155:${network.chainId}`,
+        payTo: payToAddress,
+        scheme: "exact" as const,
+      },
+    ],
   };
 }
 
@@ -110,17 +138,18 @@ async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse
   const paymentSignature = req.headers["payment-signature"] as string;
 
   if (!paymentSignature) {
-    // No payment - return 402 with payment requirements
+    // No payment - return 402 with v2 payment requirements
+    const v2Response = createPaymentRequiredResponse(
+      `https://${req.headers.host}/compile`,
+      "Compile Solidity smart contracts using the Remix compiler",
+      amount
+    );
+
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirements),
     });
-    res.end(JSON.stringify({
-      error: "Payment Required",
-      message: "This endpoint requires payment",
-      amount: `${parseFloat(amount) / 1_000_000} USDC`,
-      network: getActiveNetwork().displayName,
-    }));
+    res.end(JSON.stringify(v2Response, null, 2));
     return;
   }
 
@@ -158,8 +187,8 @@ async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse
       compiler.event.register("compilationFinished", (success: boolean, data: any) => {
         const paymentResponseHeader = Buffer.from(JSON.stringify({
           status: "settled",
-          network: requirements.network,
-          amount: requirements.maxAmountRequired,
+          network: requirements.accepts[0]!.network,
+          amount: requirements.accepts[0]!.amount,
         })).toString("base64");
 
         if (success) {
@@ -218,16 +247,18 @@ async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse
   const paymentSignature = req.headers["payment-signature"] as string;
 
   if (!paymentSignature) {
+    // No payment - return 402 with v2 payment requirements
+    const v2Response = createPaymentRequiredResponse(
+      `https://${req.headers.host}/analyze`,
+      "Run static security analysis on Solidity contracts using Slither",
+      amount
+    );
+
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirements),
     });
-    res.end(JSON.stringify({
-      error: "Payment Required",
-      message: "This endpoint requires payment",
-      amount: `${parseFloat(amount) / 1_000_000} USDC`,
-      network: getActiveNetwork().displayName,
-    }));
+    res.end(JSON.stringify(v2Response, null, 2));
     return;
   }
 
@@ -273,8 +304,8 @@ async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse
       "Content-Type": "application/json",
       "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
         status: "settled",
-        network: requirements.network,
-        amount: requirements.maxAmountRequired,
+        network: requirements.accepts[0]!.network,
+        amount: requirements.accepts[0]!.amount,
       })).toString("base64"),
     });
 
