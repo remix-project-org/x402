@@ -9,6 +9,18 @@ This document summarizes the integration of x402 Bazaar discovery functionality 
 
 ### 2. New Files
 
+#### `src/server/http-x402.ts`
+HTTP REST server implementing x402 protocol with proper 402 status codes:
+- Runs on port 8002 (configurable via `HTTP_X402_PORT`)
+- **POST /compile** - Solidity compilation with x402 payment
+- **POST /analyze** - Slither security analysis with x402 payment
+- **GET /info** - Service information
+- **GET /health** - Health check
+- Returns `402 Payment Required` with `PAYMENT-REQUIRED` header when no payment provided
+- Verifies payment from `PAYMENT-SIGNATURE` header
+- Returns `PAYMENT-RESPONSE` header on successful payment
+- Compatible with standard x402 HTTP clients and validators
+
 #### `src/server/config/bazaar.ts`
 Complete Bazaar metadata configuration for all 4 MCP tools:
 - `COMPILE_SOLIDITY_METADATA` - Compilation tool metadata

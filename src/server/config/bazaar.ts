@@ -14,11 +14,9 @@ const MCP_ENDPOINT = `${SERVER_BASE_URL}/mcp`;
 
 // Get payment configuration
 const activeNetwork = getActiveNetwork();
-const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS;
 
-if (!PAY_TO_ADDRESS) {
-  console.warn("⚠️  PAY_TO_ADDRESS not set. Discovery metadata will be incomplete.");
-}
+// Placeholder - actual PAY_TO_ADDRESS is injected dynamically at runtime by injectPayToAddress()
+const PAY_TO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /**
  * Bazaar metadata for compile_solidity tool
@@ -506,14 +504,35 @@ contract SimpleNFT {
 };
 
 /**
+ * Helper function to inject current PAY_TO_ADDRESS into metadata
+ * This ensures the address is read from env at runtime, not at module load time
+ */
+function injectPayToAddress(metadata: any) {
+  const payTo = process.env.PAY_TO_ADDRESS || "0x0000000000000000000000000000000000000000";
+
+  // Deep clone to avoid mutating the original
+  const cloned = JSON.parse(JSON.stringify(metadata));
+
+  // Inject payTo into each accepts entry
+  if (cloned.accepts && Array.isArray(cloned.accepts)) {
+    cloned.accepts.forEach((accept: any) => {
+      accept.payTo = payTo;
+    });
+  }
+
+  return cloned;
+}
+
+/**
  * Get all Bazaar metadata for all tools
+ * Dynamically injects PAY_TO_ADDRESS from environment
  */
 export function getAllBazaarMetadata() {
   return [
-    COMPILE_SOLIDITY_METADATA,
-    ANALYZE_SLITHER_METADATA,
-    COMPILE_DEPLOY_METADATA,
-    COMPILE_DEPLOY_MULTI_METADATA,
+    injectPayToAddress(COMPILE_SOLIDITY_METADATA),
+    injectPayToAddress(ANALYZE_SLITHER_METADATA),
+    injectPayToAddress(COMPILE_DEPLOY_METADATA),
+    injectPayToAddress(COMPILE_DEPLOY_MULTI_METADATA),
   ];
 }
 

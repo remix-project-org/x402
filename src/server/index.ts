@@ -1,5 +1,9 @@
-import { FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/server/fastmcp";
+// Load environment variables FIRST - before any other imports
+// This ensures PAY_TO_ADDRESS and other env vars are available when modules load
 import dotenv from "dotenv";
+dotenv.config();
+
+import { FastMCP } from "@ampersend_ai/ampersend-sdk/mcp/server/fastmcp";
 import {
   registerCompileSolidityTool,
   registerAnalyzeWithSlitherTool,
@@ -9,9 +13,7 @@ import {
 import { getActiveNetwork, getSupportedNetworks } from "./config/network.js";
 import { TOOL_CONFIG, usdcToUsd } from "./config/tools.js";
 import { startDiscoveryServer, setupGracefulShutdown } from "./discovery.js";
-
-// Load environment variables
-dotenv.config();
+import { startHttpX402Server } from "./http-x402.js";
 
 // Create MCP server instance
 const mcp = new FastMCP({
@@ -59,3 +61,9 @@ console.log(`\n💡 Available networks: ${getSupportedNetworks().join(", ")}`);
 // Start the Bazaar discovery server
 const discoveryServer = startDiscoveryServer();
 setupGracefulShutdown(discoveryServer);
+
+// Start the HTTP x402 server (REST endpoints with 402 responses)
+const httpX402Server = startHttpX402Server();
+if (httpX402Server) {
+  setupGracefulShutdown(httpX402Server);
+}
