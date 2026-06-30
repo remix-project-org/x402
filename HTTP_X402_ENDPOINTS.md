@@ -6,6 +6,14 @@ This document describes the HTTP REST endpoints that implement the x402 payment 
 
 In addition to the MCP server, this implementation provides standard HTTP REST endpoints that follow the x402 protocol specification. These endpoints are designed to be compatible with standard x402 HTTP clients and validators like agentic.market/validate.
 
+### Key Features
+
+- **x402 v2 Protocol**: Full compliance with the latest x402 payment protocol
+- **Bazaar Discovery Extension**: Includes complete metadata in both response body and `PAYMENT-REQUIRED` header
+- **Absolute Resource URLs**: All resource URLs use `https://` scheme for validator compatibility
+- **On-chain Payment Verification**: Verifies USDC payments on Base Sepolia before service execution
+- **Auto-discoverable**: Indexed on agentic.market for AI agent discovery
+
 ## Architecture
 
 ```
@@ -90,10 +98,98 @@ curl -X POST http://localhost:8002/compile \
 **Response (402 Payment Required)**:
 ```json
 {
-  "error": "Payment Required",
-  "message": "This endpoint requires payment",
-  "amount": "0.01 USDC",
-  "network": "Base Sepolia Testnet"
+  "x402Version": 2,
+  "resource": {
+    "url": "https://your-domain.com/compile",
+    "description": "Compile Solidity smart contracts using the Remix compiler",
+    "mimeType": "application/json"
+  },
+  "accepts": [
+    {
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "amount": "10000",
+      "network": "eip155:84532",
+      "payTo": "0xYourAddress",
+      "scheme": "exact",
+      "maxTimeoutSeconds": 300
+    }
+  ],
+  "extensions": {
+    "bazaar": {
+      "info": {
+        "input": {
+          "type": "http",
+          "method": "POST",
+          "bodyType": "json",
+          "body": {
+            "sources": {
+              "MyToken.sol": {
+                "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract MyToken {\n    string public name = \"MyToken\";\n}"
+              }
+            },
+            "version": "v0.8.35+commit.47b9dedd"
+          }
+        },
+        "output": {
+          "type": "json",
+          "example": {
+            "success": true,
+            "contracts": {
+              "MyToken.sol": {
+                "MyToken": {
+                  "abi": [],
+                  "evm": {
+                    "bytecode": {
+                      "object": "0x608060405..."
+                    }
+                  }
+                }
+              }
+            },
+            "version": "v0.8.35+commit.47b9dedd"
+          }
+        }
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string", "const": "http"},
+              "method": {"type": "string", "enum": ["POST", "PUT", "PATCH"]},
+              "bodyType": {"type": "string", "enum": ["json", "form-data", "text"]},
+              "body": {
+                "type": "object",
+                "properties": {
+                  "sources": {
+                    "type": "object",
+                    "description": "Map of filename to source code",
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "content": {"type": "string"}
+                      },
+                      "required": ["content"]
+                    }
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Solidity compiler version"
+                  }
+                },
+                "required": ["sources"]
+              }
+            },
+            "required": ["type", "method", "bodyType", "body"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["input"]
+      }
+    }
+  }
 }
 ```
 
@@ -101,8 +197,10 @@ curl -X POST http://localhost:8002/compile \
 ```
 HTTP/1.1 402 Payment Required
 Content-Type: application/json
-PAYMENT-REQUIRED: <base64-encoded-payment-requirements>
+PAYMENT-REQUIRED: <base64-encoded-payment-requirements-with-extensions>
 ```
+
+> **Note**: The `PAYMENT-REQUIRED` header contains the same JSON structure as the response body, base64-encoded. This includes the full Bazaar extension metadata for validator compatibility.
 
 **Request with payment**:
 ```bash
@@ -331,18 +429,40 @@ When `PAY_TO_ADDRESS` is configured, the HTTP endpoints are automatically includ
         "input": {
           "type": "http",
           "method": "POST",
-          "description": "...",
-          "example": {...}
+          "bodyType": "json",
+          "body": {
+            "sources": {"MyToken.sol": {"content": "..."}},
+            "version": "v0.8.35+commit.47b9dedd"
+          }
         },
         "output": {
           "type": "json",
-          "example": {...}
+          "example": {
+            "success": true,
+            "contracts": {...},
+            "version": "v0.8.35+commit.47b9dedd"
+          }
         }
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string", "const": "http"},
+              "method": {"type": "string", "enum": ["POST", "PUT", "PATCH"]},
+              "bodyType": {"type": "string", "enum": ["json", "form-data", "text"]},
+              "body": {"type": "object"}
+            },
+            "required": ["type", "method", "bodyType", "body"]
+          }
+        },
+        "required": ["input"]
       }
     }
-  },
-  "serviceName": "Remix Compiler (HTTP)",
-  "tags": ["solidity", "compiler", "http", "x402"]
+  }
 }
 ```
 
@@ -360,9 +480,11 @@ To validate your HTTP x402 endpoints:
 5. **Enter endpoint**: `https://your-ngrok-url.ngrok.io/compile`
 6. **Verify**: The validator will test:
    - 402 response with PAYMENT-REQUIRED header
-   - Payment header format
+   - Payment header format and content
+   - Bazaar extension presence in both response body and header
+   - Resource URL format (must be absolute with https:// scheme)
+   - Input/output metadata with schemas and examples
    - Facilitator configuration
-   - Bazaar indexing (if applicable)
 
 ## Security Notes
 
