@@ -12,6 +12,7 @@ import http from "http";
 import { URL } from "url";
 import { verify } from "x402/facilitator";
 import { createConnectedClient } from "x402/types";
+import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { getActiveNetwork } from "./config/network.js";
 import { TOOL_CONFIG } from "./config/tools.js";
 import { Compiler } from "@remix-project/remix-solidity";
@@ -39,7 +40,7 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
 /**
  * Create x402 v2 payment required response
  */
-function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string) {
+function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string, inputSchema: any, inputExample: any, outputExample: any) {
   const network = getActiveNetwork();
   const payToAddress = process.env.PAY_TO_ADDRESS;
 
@@ -52,24 +53,36 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
     },
     accepts: [
       {
-        asset: "USDC",
+        asset: network.usdcAddress,
         amount: amount,
         network: `eip155:${network.chainId}`,
         payTo: payToAddress,
         scheme: "exact" as const,
+        maxTimeoutSeconds: 300,
       },
     ],
+    extensions: {
+      ...declareDiscoveryExtension({
+        method: "POST",
+        input: inputExample,
+        inputSchema: inputSchema,
+        bodyType: "json" as const,
+        output: {
+          example: outputExample,
+        },
+      } as any),
+    },
   };
 }
 
 /**
  * Create v2 payment requirements for header
  */
-function createPaymentRequirements(resource: string, amount: string) {
+function createPaymentRequirements(resource: string, amount: string, extensions?: any) {
   const network = getActiveNetwork();
   const payToAddress = process.env.PAY_TO_ADDRESS;
 
-  return {
+  const requirements: any = {
     x402Version: 2,
     resource: {
       url: resource,
@@ -77,14 +90,22 @@ function createPaymentRequirements(resource: string, amount: string) {
     },
     accepts: [
       {
-        asset: "USDC",
+        asset: network.usdcAddress,
         amount: amount,
         network: `eip155:${network.chainId}`,
         payTo: payToAddress,
         scheme: "exact" as const,
+        maxTimeoutSeconds: 300,
       },
     ],
   };
+
+  // Include extensions if provided (for Bazaar discovery)
+  if (extensions) {
+    requirements.extensions = extensions;
+  }
+
+  return requirements;
 }
 
 /**
@@ -139,15 +160,68 @@ async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse
 
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
+    const inputSchema = {
+      type: "object",
+      properties: {
+        sources: {
+          type: "object",
+          description: "Map of filename to source code",
+          additionalProperties: {
+            type: "object",
+            properties: {
+              content: { type: "string" }
+            },
+            required: ["content"]
+          }
+        },
+        version: { type: "string", description: "Solidity compiler version" },
+        settings: { type: "object", description: "Compiler settings" }
+      },
+      required: ["sources"]
+    };
+
+    const inputExample = {
+      sources: {
+        "MyToken.sol": {
+          content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyToken {
+    string public name = "MyToken";
+}`
+        }
+      },
+      version: "v0.8.35+commit.47b9dedd"
+    };
+
+    const outputExample = {
+      success: true,
+      contracts: {
+        "MyToken.sol": {
+          MyToken: {
+            abi: [],
+            evm: { bytecode: { object: "0x608060405..." } }
+          }
+        }
+      },
+      version: "v0.8.35+commit.47b9dedd"
+    };
+
     const v2Response = createPaymentRequiredResponse(
       `https://${req.headers.host}/compile`,
       "Compile Solidity smart contracts using the Remix compiler",
-      amount
+      amount,
+      inputSchema,
+      inputExample,
+      outputExample
     );
+
+    // Include extensions in the header as well
+    const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions);
 
     res.writeHead(402, {
       "Content-Type": "application/json",
-      "PAYMENT-REQUIRED": encodePaymentRequirements(requirements),
+      "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
     });
     res.end(JSON.stringify(v2Response, null, 2));
     return;
@@ -248,15 +322,67 @@ async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse
 
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
+    const inputSchema = {
+      type: "object",
+      properties: {
+        sources: {
+          type: "object",
+          description: "Map of filename to source code",
+          additionalProperties: {
+            type: "object",
+            properties: {
+              content: { type: "string" }
+            },
+            required: ["content"]
+          }
+        },
+        version: { type: "string", description: "Solidity compiler version" },
+        detectors: { type: "array", items: { type: "string" }, description: "Specific Slither detectors" },
+        excludeLow: { type: "boolean", description: "Exclude low severity findings" },
+        excludeInformational: { type: "boolean", description: "Exclude informational findings" }
+      },
+      required: ["sources"]
+    };
+
+    const inputExample = {
+      sources: {
+        "Contract.sol": {
+          content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Example {
+    uint256 public value;
+
+    function setValue(uint256 _value) public {
+        value = _value;
+    }
+}`
+        }
+      },
+      version: "v0.8.35+commit.47b9dedd"
+    };
+
+    const outputExample = {
+      success: true,
+      summary: { totalFindings: 0, high: 0, medium: 0, low: 0 },
+      findings: []
+    };
+
     const v2Response = createPaymentRequiredResponse(
       `https://${req.headers.host}/analyze`,
       "Run static security analysis on Solidity contracts using Slither",
-      amount
+      amount,
+      inputSchema,
+      inputExample,
+      outputExample
     );
+
+    // Include extensions in the header as well
+    const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions);
 
     res.writeHead(402, {
       "Content-Type": "application/json",
-      "PAYMENT-REQUIRED": encodePaymentRequirements(requirements),
+      "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
     });
     res.end(JSON.stringify(v2Response, null, 2));
     return;
