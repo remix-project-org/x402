@@ -151,7 +151,7 @@ async function verifyPayment(payment: any, requirements: any): Promise<boolean> 
  * Handle /compile endpoint - Solidity compilation
  */
 async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse) {
-  const resource = `${req.headers.host}/compile`;
+  const resource = `https://${req.headers.host}/compile`;
   const amount = TOOL_CONFIG.payments.compileSolidity;
   const requirements = createPaymentRequirements(resource, amount);
 
@@ -208,7 +208,7 @@ contract MyToken {
     };
 
     const v2Response = createPaymentRequiredResponse(
-      `https://${req.headers.host}/compile`,
+      resource,
       "Compile Solidity smart contracts using the Remix compiler",
       amount,
       inputSchema,
@@ -314,7 +314,7 @@ contract MyToken {
  * Handle /analyze endpoint - Slither analysis
  */
 async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse) {
-  const resource = `${req.headers.host}/analyze`;
+  const resource = `https://${req.headers.host}/analyze`;
   const amount = TOOL_CONFIG.payments.analyzeWithSlither;
   const requirements = createPaymentRequirements(resource, amount);
 
@@ -369,7 +369,7 @@ contract Example {
     };
 
     const v2Response = createPaymentRequiredResponse(
-      `https://${req.headers.host}/analyze`,
+      resource,
       "Run static security analysis on Solidity contracts using Slither",
       amount,
       inputSchema,
