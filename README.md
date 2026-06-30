@@ -205,37 +205,6 @@ The server exposes structured metadata at `http://localhost:8001/discovery` that
 - **Service descriptions** - Natural language descriptions for semantic search
 - **Examples** - Sample inputs and outputs for each tool
 
-### How Discovery Works
-
-1. **Automatic Indexing**: Once you make a successful payment through the CDP Facilitator, your service is automatically cataloged
-2. **No Registration Required**: The CDP Facilitator extracts metadata from the `/discovery` endpoint
-3. **Searchable by AI Agents**: Services indexed on the Bazaar can be discovered by AI agents using semantic search
-4. **Quality Signals**: Your service visibility improves based on usage and quality
-
-### Validation
-
-To validate your endpoint is properly configured for the Bazaar:
-
-1. **Start the server**: `yarn build && yarn start`
-2. **Visit the validator**: Go to [https://agentic.market/validate](https://agentic.market/validate)
-3. **Enter your endpoint**: Use your public URL (e.g., `https://your-domain.com/discovery`)
-4. **Check results**: The validator will verify metadata format and indexing requirements
-
-### Environment Variables for Discovery
-
-Optional configuration for the discovery endpoint:
-
-```bash
-# Server base URL for resource identifiers (default: http://localhost:8000)
-SERVER_BASE_URL=https://your-domain.com
-
-# Discovery server port (default: 8001)
-DISCOVERY_PORT=8001
-
-# Payment receiving address (required for proper metadata)
-PAY_TO_ADDRESS=0xYourAddress
-```
-
 ## Network Details
 
 - **Network**: Base Sepolia
