@@ -3,6 +3,27 @@ import { createConnectedClient } from "x402/types";
 import { getActiveNetwork } from "../config/network.js";
 
 /**
+ * Validate that PAY_TO_ADDRESS is set and not zero address
+ */
+function validatePayToAddress(address: string | undefined): string {
+  if (!address) {
+    throw new Error("PAY_TO_ADDRESS environment variable is not set. Payment address is required.");
+  }
+
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+  if (address.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+    throw new Error("PAY_TO_ADDRESS cannot be the zero address. Payments would be lost forever.");
+  }
+
+  // Basic validation: check if it looks like an Ethereum address
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    throw new Error(`PAY_TO_ADDRESS is not a valid Ethereum address: ${address}`);
+  }
+
+  return address;
+}
+
+/**
  * Create payment requirements for a tool
  */
 export function createPaymentRequirements(
@@ -11,6 +32,7 @@ export function createPaymentRequirements(
   description: string
 ) {
   const network = getActiveNetwork();
+  const payToAddress = validatePayToAddress(process.env.PAY_TO_ADDRESS);
 
   return {
     scheme: "exact" as const,
@@ -19,7 +41,7 @@ export function createPaymentRequirements(
     maxAmountRequired: amount,
     resource,
     mimeType: "application/json",
-    payTo: process.env.PAY_TO_ADDRESS as string,
+    payTo: payToAddress,
     maxTimeoutSeconds: 300,
     asset: network.usdcAddress,
     extra: {

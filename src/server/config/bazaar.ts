@@ -15,9 +15,6 @@ const MCP_ENDPOINT = `${SERVER_BASE_URL}/mcp`;
 // Get payment configuration
 const activeNetwork = getActiveNetwork();
 
-// Placeholder - actual PAY_TO_ADDRESS is injected dynamically at runtime by injectPayToAddress()
-const PAY_TO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
 /**
  * Bazaar metadata for compile_solidity tool
  */
@@ -29,7 +26,7 @@ export const COMPILE_SOLIDITY_METADATA = {
       asset: "USDC",
       amount: TOOL_CONFIG.payments.compileSolidity,
       network: `eip155:${activeNetwork.chainId}`,
-      payTo: PAY_TO_ADDRESS || "0x0000000000000000000000000000000000000000",
+      payTo: "", // Will be injected by injectPayToAddress()
       scheme: "exact" as const,
     },
   ],
@@ -151,7 +148,7 @@ export const ANALYZE_SLITHER_METADATA = {
       asset: "USDC",
       amount: TOOL_CONFIG.payments.analyzeWithSlither,
       network: `eip155:${activeNetwork.chainId}`,
-      payTo: PAY_TO_ADDRESS || "0x0000000000000000000000000000000000000000",
+      payTo: "", // Will be injected by injectPayToAddress()
       scheme: "exact" as const,
     },
   ],
@@ -257,7 +254,7 @@ export const COMPILE_DEPLOY_METADATA = {
       asset: "USDC",
       amount: "50000", // Base fee, actual cost is dynamic
       network: `eip155:${activeNetwork.chainId}`,
-      payTo: PAY_TO_ADDRESS || "0x0000000000000000000000000000000000000000",
+      payTo: "", // Will be injected by injectPayToAddress()
       scheme: "dynamic" as const,
     },
   ],
@@ -382,7 +379,7 @@ export const COMPILE_DEPLOY_MULTI_METADATA = {
       asset: "USDC",
       amount: "55000", // Base fee with multi-network buffer
       network: `eip155:${activeNetwork.chainId}`,
-      payTo: PAY_TO_ADDRESS || "0x0000000000000000000000000000000000000000",
+      payTo: "", // Will be injected by injectPayToAddress()
       scheme: "dynamic" as const,
     },
   ],
@@ -506,9 +503,25 @@ contract SimpleNFT {
 /**
  * Helper function to inject current PAY_TO_ADDRESS into metadata
  * This ensures the address is read from env at runtime, not at module load time
+ * Validates that the address is not zero and properly formatted
  */
 function injectPayToAddress(metadata: any) {
-  const payTo = process.env.PAY_TO_ADDRESS || "0x0000000000000000000000000000000000000000";
+  const payTo = process.env.PAY_TO_ADDRESS;
+
+  // Validate that PAY_TO_ADDRESS is set and not zero address
+  if (!payTo) {
+    throw new Error("PAY_TO_ADDRESS environment variable is not set. Payment address is required.");
+  }
+
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+  if (payTo.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+    throw new Error("PAY_TO_ADDRESS cannot be the zero address. Payments would be lost forever.");
+  }
+
+  // Basic validation: check if it looks like an Ethereum address
+  if (!/^0x[a-fA-F0-9]{40}$/.test(payTo)) {
+    throw new Error(`PAY_TO_ADDRESS is not a valid Ethereum address: ${payTo}`);
+  }
 
   // Deep clone to avoid mutating the original
   const cloned = JSON.parse(JSON.stringify(metadata));

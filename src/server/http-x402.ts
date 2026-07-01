@@ -20,6 +20,27 @@ import { Compiler } from "@remix-project/remix-solidity";
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
 /**
+ * Validate that PAY_TO_ADDRESS is set and not zero address
+ */
+function validatePayToAddress(address: string | undefined): string {
+  if (!address) {
+    throw new Error("PAY_TO_ADDRESS environment variable is not set. Payment address is required.");
+  }
+
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+  if (address.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+    throw new Error("PAY_TO_ADDRESS cannot be the zero address. Payments would be lost forever.");
+  }
+
+  // Basic validation: check if it looks like an Ethereum address
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    throw new Error(`PAY_TO_ADDRESS is not a valid Ethereum address: ${address}`);
+  }
+
+  return address;
+}
+
+/**
  * Parse JSON body from request
  */
 async function parseBody(req: http.IncomingMessage): Promise<any> {
@@ -42,7 +63,7 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
  */
 function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string, inputSchema: any, inputExample: any, outputExample: any) {
   const network = getActiveNetwork();
-  const payToAddress = process.env.PAY_TO_ADDRESS;
+  const payToAddress = validatePayToAddress(process.env.PAY_TO_ADDRESS);
 
   return {
     x402Version: 2,
@@ -80,7 +101,7 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
  */
 function createPaymentRequirements(resource: string, amount: string, extensions?: any) {
   const network = getActiveNetwork();
-  const payToAddress = process.env.PAY_TO_ADDRESS;
+  const payToAddress = validatePayToAddress(process.env.PAY_TO_ADDRESS);
 
   const requirements: any = {
     x402Version: 2,
