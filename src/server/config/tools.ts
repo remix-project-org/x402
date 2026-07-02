@@ -28,7 +28,7 @@ export const TOOL_CONFIG = {
 
   // Slither Analysis Configuration
   slither: {
-    apiUrl: "https://mcp.api.remix.live/slither/analyze",
+    apiUrl: "https://api.remix.live/mcp/slither/analyze",
     defaultVersion: "0.8.35+commit.47b9dedd"
   },
 
