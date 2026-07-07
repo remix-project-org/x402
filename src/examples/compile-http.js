@@ -7,8 +7,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// HTTP x402 v2 endpoint - production
-const httpEndpoint = "https://api.remix.live/mcp/x402-http/compile";
+// HTTP x402 v2 endpoint - local testing
+const httpEndpoint = "http://localhost:8002/compile";
 
 console.log("🔌 Testing HTTP x402 v2 endpoint with @x402/fetch...");
 console.log(`   Endpoint: ${httpEndpoint}`);
@@ -73,7 +73,18 @@ try {
 
   // Create x402 client with ExactEvmScheme for Base Sepolia
   const client = new x402Client();
-  const exactScheme = new ExactEvmScheme(evmSigner);
+
+  // Configure ExactEvmScheme with CDP facilitator (requires API keys on server)
+  // Note: Client doesn't need API keys, only the server does
+  const facilitatorUrl = process.env.CDP_API_KEY_ID
+    ? "https://api.cdp.coinbase.com/platform/v2/x402"
+    : "https://x402.org/facilitator";
+
+  const exactScheme = new ExactEvmScheme(evmSigner, {
+    facilitatorUrl: facilitatorUrl
+  });
+
+  console.log(`   Using facilitator: ${facilitatorUrl}`);
 
   // Register the scheme for eip155:84532 (Base Sepolia)
   client.register("eip155:84532", exactScheme);
@@ -89,7 +100,7 @@ try {
   console.log("\n🔧 Making request with x402-enabled fetch...");
   console.log("   x402/fetch will automatically:");
   console.log("   1. Detect 402 Payment Required response");
-  console.log("   2. Settle payment via CDP Facilitator");
+  console.log("   2. Settle payment via facilitator");
   console.log("   3. Retry request with payment proof");
   console.log("   4. This triggers indexing on agentic.market!");
 
