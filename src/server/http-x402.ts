@@ -11,11 +11,68 @@
 import http from "http";
 import { URL } from "url";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
+import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
 import { TOOL_CONFIG } from "./config/tools.js";
 import { Compiler } from "@remix-project/remix-solidity";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
+
+// Facilitator Configuration
+// The facilitator settles payments on behalf of the server (facilitator pays gas)
+//
+// Option 1: x402.org facilitator (testnet only, no auth required)
+//   - URL: https://x402.org/facilitator
+//   - Networks: Base Sepolia, Solana Devnet
+//   - Authentication: None
+//   - Use for: Testing and development
+//
+// Option 2: CDP facilitator (testnet + mainnet, requires CDP API keys)
+//   - URL: https://api.cdp.coinbase.com/platform/v2/x402
+//   - Networks: All supported networks
+//   - Authentication: CDP_API_KEY_ID and CDP_API_KEY_SECRET required
+//   - Use for: Production or if you need more than testnet
+//
+// Lazy-load facilitator client to ensure env vars are loaded
+let facilitatorClient: HTTPFacilitatorClient | null = null;
+let USE_CDP_FACILITATOR = false;
+let FACILITATOR_URL = "";
+
+function getFacilitatorClient(): HTTPFacilitatorClient {
+  if (facilitatorClient) {
+    return facilitatorClient;
+  }
+
+  // Check for CDP credentials (loaded by dotenv in index.ts)
+  USE_CDP_FACILITATOR = !!(process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET);
+  FACILITATOR_URL = USE_CDP_FACILITATOR
+    ? "https://api.cdp.coinbase.com/platform/v2/x402"
+    : "https://x402.org/facilitator";
+
+  console.log(`🔐 Facilitator: ${USE_CDP_FACILITATOR ? 'CDP' : 'x402.org'} - ${FACILITATOR_URL}`);
+
+  // Create HTTPFacilitatorClient with CDP authentication if available
+  // CDP authentication requires createAuthHeaders function, not static headers
+  facilitatorClient = new HTTPFacilitatorClient({
+    url: FACILITATOR_URL,
+    ...(USE_CDP_FACILITATOR ? {
+      createAuthHeaders: async () => {
+        const authHeaders = {
+          'X-CDP-API-KEY-ID': process.env.CDP_API_KEY_ID!,
+          'X-CDP-API-KEY-SECRET': process.env.CDP_API_KEY_SECRET!,
+        };
+        return {
+          verify: authHeaders,
+          settle: authHeaders,
+          supported: authHeaders,
+          bazaar: authHeaders,
+        };
+      }
+    } : {})
+  });
+
+  return facilitatorClient;
+}
 
 /**
  * Validate that PAY_TO_ADDRESS is set and not zero address
@@ -156,59 +213,70 @@ function decodePaymentSignature(headerValue: string): any {
 }
 
 /**
- * Verify x402 v2 payment on-chain
- * For v2, we verify the EIP-3009 authorization directly
+ * Settle and verify payment using CDP Facilitator
+ *
+ * CDP Facilitator Flow (Approach 2):
+ * 1. Client signs EIP-3009 authorization (off-chain signature)
+ * 2. Client sends signed authorization to server
+ * 3. Server calls CDP Facilitator to settle payment
+ *    - Facilitator pays gas (not client, not server)
+ *    - Facilitator executes USDC transfer on-chain
+ * 4. Server verifies settlement succeeded via facilitator
+ * 5. Server provides the service
+ *
+ * Requirements:
+ * - CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables
+ * - Obtained from https://portal.cdp.coinbase.com/
+ *
+ * Benefits:
+ * - Server doesn't pay gas
+ * - Client doesn't pay gas
+ * - CDP Facilitator sponsors the gas
  */
-async function verifyPayment(payment: any, requirements: any): Promise<boolean> {
+async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean> {
   try {
-    // For x402 v2, payment includes accepted option
-    const accepted = payment.accepted || payment.option;
-    const network = accepted?.network || payment.network;
+    const from = payment.payload?.authorization?.from;
+    const to = payment.payload?.authorization?.to;
+    const amount = payment.payload?.authorization?.value;
+    const network = payment.accepted?.network || payment.network;
 
-    if (!network) {
-      console.error("❌ No network found in payment");
+    console.log(`💰 Payment: ${amount} units from ${from?.slice(0, 10)}... to ${to?.slice(0, 10)}... on ${network}`);
+
+    // Normalize payment object for facilitator
+    // The facilitator expects scheme and network at top level
+    const normalizedPayment = {
+      ...payment,
+      scheme: payment.accepted?.scheme || 'exact',
+      network: payment.accepted?.network,
+    };
+
+    // Settle payment via facilitator
+    console.log(`⛓️  Settling payment via facilitator...`);
+    const client = getFacilitatorClient();
+    const settleResponse = await client.settle(normalizedPayment, v2Requirements);
+
+    if (!settleResponse.success) {
+      console.error(`❌ Settlement failed: ${settleResponse.errorReason || 'unknown'}`);
+      if (settleResponse.errorMessage) {
+        console.error(`   ${settleResponse.errorMessage}`);
+      }
       return false;
     }
 
-    console.log(`🔍 Verifying v2 payment on network: ${network}`);
+    console.log(`✅ Payment settled - TX: ${settleResponse.transaction || 'N/A'}`);
 
-    // For x402 v2 with EIP-3009, the payment has already been settled on-chain
-    // The client sends the authorization that was executed
-    // We need to verify:
-    // 1. The authorization matches the requirements
-    // 2. The on-chain transfer has occurred (optional for now)
+    // Verify the settlement
+    const verifyResponse = await client.verify(normalizedPayment, v2Requirements);
 
-    const auth = payment.payload?.authorization;
-    if (!auth) {
-      console.error("❌ No authorization in payment payload");
+    if (verifyResponse.isValid) {
+      console.log(`✅ Payment verified on-chain`);
+      return true;
+    } else {
+      console.error(`❌ Verification failed: ${verifyResponse.invalidReason || 'unknown'}`);
       return false;
     }
-
-    // Verify the authorization matches requirements
-    const expectedAmount = requirements.accepts?.[0]?.amount || accepted?.amount;
-    const expectedPayTo = requirements.accepts?.[0]?.payTo || accepted?.payTo;
-
-    if (auth.value !== expectedAmount) {
-      console.error(`❌ Amount mismatch: expected ${expectedAmount}, got ${auth.value}`);
-      return false;
-    }
-
-    if (auth.to.toLowerCase() !== expectedPayTo?.toLowerCase()) {
-      console.error(`❌ PayTo mismatch: expected ${expectedPayTo}, got ${auth.to}`);
-      return false;
-    }
-
-    console.log(`✅ Payment verified:`);
-    console.log(`   From: ${auth.from}`);
-    console.log(`   To: ${auth.to}`);
-    console.log(`   Amount: ${auth.value} (${parseInt(auth.value) / 1_000_000} USDC)`);
-
-    // TODO: Optionally verify the transaction was actually executed on-chain
-    // by checking the nonce was used or the transfer event was emitted
-
-    return true;
   } catch (error: any) {
-    console.error(`❌ Payment verification error:`, error.message);
+    console.error(`❌ Payment error: ${error.message}`);
     return false;
   }
 }
