@@ -1,8 +1,6 @@
 import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
-import { ExactEvmScheme, toClientEvmSigner } from "@x402/evm";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
-import { createWalletClient, http } from "viem";
-import { baseSepolia } from "viem/chains";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -50,36 +48,17 @@ try {
     throw new Error("PRIVATE_KEY must be set in .env file");
   }
 
-  const account = privateKeyToAccount(privateKey);
-  console.log(`   Wallet address: ${account.address}`);
-
-  // Create viem wallet client
-  const walletClient = createWalletClient({
-    account,
-    chain: baseSepolia,
-    transport: http()
-  });
-
-  // toClientEvmSigner needs signer.address at the top level
-  // Add address property for compatibility
-  const signerWithAddress = {
-    ...walletClient,
-    address: account.address
-  };
-
-  // Convert to x402 EVM signer
-  const evmSigner = toClientEvmSigner(signerWithAddress);
-  console.log(`   EVM signer configured for: ${evmSigner.address}`);
+  const evmSigner = privateKeyToAccount(privateKey);
+  console.log(`   Wallet address: ${evmSigner.address}`);
 
   // Create x402 client with ExactEvmScheme for Base Sepolia
+  // Following official example from coinbase/x402 repo
   const client = new x402Client();
 
-  // Configure ExactEvmScheme without facilitator
-  // The client creates the EIP-3009 authorization signature
-  // The SERVER handles facilitator communication (with CDP auth)
+  // Configure ExactEvmScheme - it automatically detects token and chain from payment requirements
   const exactScheme = new ExactEvmScheme(evmSigner);
 
-  console.log(`   Client will create EIP-3009 signature, server handles facilitator`);
+  console.log(`   Client configured with ExactEvmScheme`);
 
   // Register the scheme for eip155:84532 (Base Sepolia)
   client.register("eip155:84532", exactScheme);

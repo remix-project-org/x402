@@ -3141,7 +3141,7 @@
     "@walletconnect/window-getters" "^1.0.1"
     tslib "1.14.1"
 
-"@x402/core@^2.10.0", "@x402/core@~2.17.0":
+"@x402/core@^2.17.0", "@x402/core@~2.17.0":
   version "2.17.0"
   resolved "https://registry.yarnpkg.com/@x402/core/-/core-2.17.0.tgz#faac3871cdd5ed735eaa930f3b70f5d2d95800ad"
   integrity sha512-BBooe9Kewl5KLaKadElFwhZzZ+n/X/m2djzGtc7OY51D8fk2vHTVvDZtBFEJYdJxtQoUZMKX73hew0ss81FENQ==
@@ -3155,13 +3155,6 @@
   dependencies:
     zod "^3.24.2"
 
-"@x402/core@~2.16.0":
-  version "2.16.0"
-  resolved "https://registry.yarnpkg.com/@x402/core/-/core-2.16.0.tgz#861d38a115a1a11391c62b98ed16dc337a026c8b"
-  integrity sha512-7MjwOEiE6ICAYtOsK9vQl66Ho4jERDuuoRg/No2Nc2GQ7y/M/yu4DJ65LzeBycQE+Qrg2RqQG7KR51tyT+hzjQ==
-  dependencies:
-    zod "^3.24.2"
-
 "@x402/evm@^2.17.0":
   version "2.17.0"
   resolved "https://registry.yarnpkg.com/@x402/evm/-/evm-2.17.0.tgz#903fad40500c9cde2cece5aa1516afd81a59db22"
@@ -3171,22 +3164,22 @@
     viem "^2.48.11"
     zod "^3.24.2"
 
-"@x402/extensions@^2.16.0":
-  version "2.16.0"
-  resolved "https://registry.yarnpkg.com/@x402/extensions/-/extensions-2.16.0.tgz#6f18ae117c3e83044149e2d2bc5dee9c4d919c6d"
-  integrity sha512-LHh5QrvB1QwiPr2zFqzpJonmMGxqJq1nDHifihyqNx1lJvU3DQgYGxPuHXE2l6nxGG0chF0alA/BsidDHFie/A==
+"@x402/extensions@^2.17.0":
+  version "2.17.0"
+  resolved "https://registry.yarnpkg.com/@x402/extensions/-/extensions-2.17.0.tgz#1370db62e0aaa00c8ff2b8b46c86594edfb65af8"
+  integrity sha512-oYQPLJkRWiSutEVAsyNxwKh4EyviG//s8Ms7Jwkx4J8csm1gd7TfCQTsLwDmieYA5B2Qp8ajebdTkL+bT9/sQA==
   dependencies:
     "@noble/curves" "^1.9.0"
     "@scure/base" "^1.2.6"
     "@signinwithethereum/siwe" "^4.1.0"
-    "@x402/core" "~2.16.0"
+    "@x402/core" "~2.17.0"
     ajv "^8.17.1"
     jose "^5.9.6"
     tweetnacl "^1.0.3"
     viem "^2.48.11"
     zod "^3.24.2"
 
-"@x402/fetch@^2.10.0":
+"@x402/fetch@^2.17.0":
   version "2.17.0"
   resolved "https://registry.yarnpkg.com/@x402/fetch/-/fetch-2.17.0.tgz#4c441b0e875c7068fcdaa5bf267d2f80328de322"
   integrity sha512-iy6ar1JTgs4gzdlc2q2Z7nuL5keBkQhoD4v5niVlTwLoivVvHnAA0p/wK5WTWRrJ1b+el8pthkjFS0Jc3nMIIg==
