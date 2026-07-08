@@ -36,8 +36,10 @@ const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X4
 //
 // Lazy-load facilitator client to ensure env vars are loaded
 let facilitatorClient: HTTPFacilitatorClient | null = null;
-let USE_CDP_FACILITATOR = false;
-let FACILITATOR_URL = "";
+
+// Module-level flag to track if we're using CDP facilitator
+// This needs to be accessible in verifyPayment() for the 1-second delay
+let useCdpFacilitator = false;
 
 function getFacilitatorClient(): HTTPFacilitatorClient {
   if (facilitatorClient) {
@@ -45,18 +47,18 @@ function getFacilitatorClient(): HTTPFacilitatorClient {
   }
 
   // Check for CDP credentials (loaded by dotenv in index.ts)
-  USE_CDP_FACILITATOR = !!(process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET);
-  FACILITATOR_URL = USE_CDP_FACILITATOR
+  useCdpFacilitator = !!(process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET);
+  const FACILITATOR_URL = useCdpFacilitator
     ? "https://api.cdp.coinbase.com/platform/v2/x402"
     : "https://x402.org/facilitator";
 
-  console.log(`🔐 Facilitator: ${USE_CDP_FACILITATOR ? 'CDP' : 'x402.org'} - ${FACILITATOR_URL}`);
+  console.log(`🔐 Facilitator: ${useCdpFacilitator ? 'CDP' : 'x402.org'} - ${FACILITATOR_URL}`);
 
   // Create HTTPFacilitatorClient with CDP authentication if available
   // CDP requires JWT bearer tokens signed with Ed25519 for each request
   facilitatorClient = new HTTPFacilitatorClient({
     url: FACILITATOR_URL,
-    ...(USE_CDP_FACILITATOR ? {
+    ...(useCdpFacilitator ? {
       createAuthHeaders: async () => {
         // Generate JWT bearer tokens for CDP authentication
         // Each operation needs a separate JWT with the correct request path
@@ -284,10 +286,10 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     console.log(`   Payment payload:`, JSON.stringify(normalizedPayment, null, 2));
     console.log(`   Requirements:`, JSON.stringify(v2Requirements, null, 2));
 
-    // For CDP facilitator, try using the full v2Requirements object
-    // This includes x402Version which CDP might need
-    const paymentRequirements = v2Requirements;
-    console.log(`   Using full requirements (with x402Version):`, JSON.stringify(paymentRequirements, null, 2));
+    // For CDP facilitator, use the accepted payment details from the payment payload
+    // This is the single PaymentRequirements object that was agreed upon
+    const paymentRequirements = payment.accepted || v2Requirements.accepts[0];
+    console.log(`   Using accepted payment as requirements:`, JSON.stringify(paymentRequirements, null, 2));
 
     // Log the exact data being sent to CDP facilitator
     console.log('\n🔍 CDP Facilitator Request Data:');
@@ -296,7 +298,18 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     console.log('Payment scheme:', normalizedPayment.scheme);
     console.log('Payment network:', normalizedPayment.network);
 
+    // Get facilitator client (this also sets useCdpFacilitator flag)
     const client = getFacilitatorClient();
+
+    // IMPORTANT: Add delay before settlement for CDP facilitator
+    // After a wallet signs an ERC-3009 authorization, there's a propagation delay
+    // before CDP's verification system recognizes the signature as valid.
+    // Without this delay, gas estimation fails because the authorization is unrecognized.
+    // Increasing to 2 seconds as 1 second may be insufficient in some cases.
+    if (useCdpFacilitator) {
+      console.log('⏳ Waiting 2 seconds for signature propagation...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
     const settleResponse = await client.settle(normalizedPayment, paymentRequirements);
 
     if (!settleResponse.success) {
