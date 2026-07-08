@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@ampersend_ai/ampersend-sdk": "^0.0.16",
+    "@coinbase/cdp-sdk": "^1.51.2",
     "@remix-project/remix-solidity": "^0.5.76",
     "@x402/core": "^2.10.0",
     "@x402/evm": "^2.17.0",

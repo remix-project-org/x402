@@ -15,6 +15,7 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
 import { TOOL_CONFIG } from "./config/tools.js";
 import { Compiler } from "@remix-project/remix-solidity";
+import { generateJwt } from "@coinbase/cdp-sdk/auth";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
@@ -52,20 +53,35 @@ function getFacilitatorClient(): HTTPFacilitatorClient {
   console.log(`🔐 Facilitator: ${USE_CDP_FACILITATOR ? 'CDP' : 'x402.org'} - ${FACILITATOR_URL}`);
 
   // Create HTTPFacilitatorClient with CDP authentication if available
-  // CDP authentication requires createAuthHeaders function, not static headers
+  // CDP requires JWT bearer tokens signed with Ed25519 for each request
   facilitatorClient = new HTTPFacilitatorClient({
     url: FACILITATOR_URL,
     ...(USE_CDP_FACILITATOR ? {
       createAuthHeaders: async () => {
-        const authHeaders = {
-          'X-CDP-API-KEY-ID': process.env.CDP_API_KEY_ID!,
-          'X-CDP-API-KEY-SECRET': process.env.CDP_API_KEY_SECRET!,
+        // Generate JWT bearer tokens for CDP authentication
+        // Each operation needs a separate JWT with the correct request path
+        const generateAuthHeader = async (requestPath: string) => {
+          const jwt = await generateJwt({
+            apiKeyId: process.env.CDP_API_KEY_ID!,
+            apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+            requestMethod: 'POST',
+            requestHost: 'api.cdp.coinbase.com',
+            requestPath: requestPath,
+          });
+          return { 'Authorization': `Bearer ${jwt}` };
         };
+
+        // Generate tokens for each operation
+        const [verifyHeaders, settleHeaders, supportedHeaders] = await Promise.all([
+          generateAuthHeader('/platform/v2/x402/verify'),
+          generateAuthHeader('/platform/v2/x402/settle'),
+          generateAuthHeader('/platform/v2/x402/supported'),
+        ]);
+
         return {
-          verify: authHeaders,
-          settle: authHeaders,
-          supported: authHeaders,
-          bazaar: authHeaders,
+          verify: verifyHeaders,
+          settle: settleHeaders,
+          supported: supportedHeaders,
         };
       }
     } : {})
@@ -243,17 +259,45 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     console.log(`💰 Payment: ${amount} units from ${from?.slice(0, 10)}... to ${to?.slice(0, 10)}... on ${network}`);
 
     // Normalize payment object for facilitator
-    // The facilitator expects scheme and network at top level
+    // The facilitator expects scheme and network at top level, plus accepted field
+    // Remove extensions from payment payload as CDP facilitator doesn't recognize it
     const normalizedPayment = {
-      ...payment,
+      x402Version: payment.x402Version,
+      payload: payment.payload,
       scheme: payment.accepted?.scheme || 'exact',
       network: payment.accepted?.network,
+      resource: payment.resource,
+      // Ensure accepted field is present (required by CDP facilitator for v2)
+      accepted: payment.accepted || {
+        asset: v2Requirements.accepts[0]?.asset,
+        amount: v2Requirements.accepts[0]?.amount,
+        network: v2Requirements.accepts[0]?.network,
+        payTo: v2Requirements.accepts[0]?.payTo,
+        scheme: v2Requirements.accepts[0]?.scheme,
+        maxTimeoutSeconds: v2Requirements.accepts[0]?.maxTimeoutSeconds,
+        extra: v2Requirements.accepts[0]?.extra,
+      },
     };
 
     // Settle payment via facilitator
     console.log(`⛓️  Settling payment via facilitator...`);
+    console.log(`   Payment payload:`, JSON.stringify(normalizedPayment, null, 2));
+    console.log(`   Requirements:`, JSON.stringify(v2Requirements, null, 2));
+
+    // For CDP facilitator, try using the full v2Requirements object
+    // This includes x402Version which CDP might need
+    const paymentRequirements = v2Requirements;
+    console.log(`   Using full requirements (with x402Version):`, JSON.stringify(paymentRequirements, null, 2));
+
+    // Log the exact data being sent to CDP facilitator
+    console.log('\n🔍 CDP Facilitator Request Data:');
+    console.log('Payment payload authorization:', JSON.stringify(normalizedPayment.payload?.authorization, null, 2));
+    console.log('Payment payload signature:', normalizedPayment.payload?.signature);
+    console.log('Payment scheme:', normalizedPayment.scheme);
+    console.log('Payment network:', normalizedPayment.network);
+
     const client = getFacilitatorClient();
-    const settleResponse = await client.settle(normalizedPayment, v2Requirements);
+    const settleResponse = await client.settle(normalizedPayment, paymentRequirements);
 
     if (!settleResponse.success) {
       console.error(`❌ Settlement failed: ${settleResponse.errorReason || 'unknown'}`);
@@ -266,7 +310,7 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     console.log(`✅ Payment settled - TX: ${settleResponse.transaction || 'N/A'}`);
 
     // Verify the settlement
-    const verifyResponse = await client.verify(normalizedPayment, v2Requirements);
+    const verifyResponse = await client.verify(normalizedPayment, paymentRequirements);
 
     if (verifyResponse.isValid) {
       console.log(`✅ Payment verified on-chain`);
@@ -277,6 +321,14 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     }
   } catch (error: any) {
     console.error(`❌ Payment error: ${error.message}`);
+    if (error.response) {
+      console.error(`   Response status: ${error.response.status}`);
+      console.error(`   Response data:`, JSON.stringify(error.response.data, null, 2));
+    }
+    if (error.cause) {
+      console.error(`   Cause:`, error.cause);
+    }
+    console.error(`   Full error:`, error);
     return false;
   }
 }

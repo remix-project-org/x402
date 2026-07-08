@@ -74,17 +74,12 @@ try {
   // Create x402 client with ExactEvmScheme for Base Sepolia
   const client = new x402Client();
 
-  // Configure ExactEvmScheme with CDP facilitator (requires API keys on server)
-  // Note: Client doesn't need API keys, only the server does
-  const facilitatorUrl = process.env.CDP_API_KEY_ID
-    ? "https://api.cdp.coinbase.com/platform/v2/x402"
-    : "https://x402.org/facilitator";
+  // Configure ExactEvmScheme without facilitator
+  // The client creates the EIP-3009 authorization signature
+  // The SERVER handles facilitator communication (with CDP auth)
+  const exactScheme = new ExactEvmScheme(evmSigner);
 
-  const exactScheme = new ExactEvmScheme(evmSigner, {
-    facilitatorUrl: facilitatorUrl
-  });
-
-  console.log(`   Using facilitator: ${facilitatorUrl}`);
+  console.log(`   Client will create EIP-3009 signature, server handles facilitator`);
 
   // Register the scheme for eip155:84532 (Base Sepolia)
   client.register("eip155:84532", exactScheme);
