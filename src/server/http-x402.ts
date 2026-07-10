@@ -155,7 +155,8 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
         maxTimeoutSeconds: 300,
         extra: {
           // EIP-712 domain parameters for USDC (required for EIP-3009 signatures)
-          name: "USD Coin",
+          // IMPORTANT: Must match exactly what the USDC contract returns
+          name: "USDC",
           version: "2"
         }
       },
@@ -197,7 +198,8 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
         maxTimeoutSeconds: 300,
         extra: {
           // EIP-712 domain parameters for USDC (required for EIP-3009 signatures)
-          name: "USD Coin",
+          // IMPORTANT: Must match exactly what the USDC contract returns
+          name: "USDC",
           version: "2"
         }
       },
@@ -231,25 +233,9 @@ function decodePaymentSignature(headerValue: string): any {
 }
 
 /**
- * Settle and verify payment using CDP Facilitator
- *
- * CDP Facilitator Flow (Approach 2):
- * 1. Client signs EIP-3009 authorization (off-chain signature)
- * 2. Client sends signed authorization to server
- * 3. Server calls CDP Facilitator to settle payment
- *    - Facilitator pays gas (not client, not server)
- *    - Facilitator executes USDC transfer on-chain
- * 4. Server verifies settlement succeeded via facilitator
- * 5. Server provides the service
- *
- * Requirements:
- * - CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables
- * - Obtained from https://portal.cdp.coinbase.com/
- *
- * Benefits:
- * - Server doesn't pay gas
- * - Client doesn't pay gas
- * - CDP Facilitator sponsors the gas
+ * Verify and settle payment using CDP Facilitator
+ * - Verify: Validates the EIP-3009 authorization signature
+ * - Settle: Executes the USDC transfer on-chain (CDP pays gas)
  */
 async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean> {
   try {
@@ -261,15 +247,12 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     console.log(`💰 Payment: ${amount} units from ${from?.slice(0, 10)}... to ${to?.slice(0, 10)}... on ${network}`);
 
     // Normalize payment object for facilitator
-    // The facilitator expects scheme and network at top level, plus accepted field
-    // Remove extensions from payment payload as CDP facilitator doesn't recognize it
     const normalizedPayment = {
       x402Version: payment.x402Version,
       payload: payment.payload,
       scheme: payment.accepted?.scheme || 'exact',
       network: payment.accepted?.network,
       resource: payment.resource,
-      // Ensure accepted field is present (required by CDP facilitator for v2)
       accepted: payment.accepted || {
         asset: v2Requirements.accepts[0]?.asset,
         amount: v2Requirements.accepts[0]?.amount,
@@ -281,35 +264,33 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
       },
     };
 
-    // Settle payment via facilitator
-    console.log(`⛓️  Settling payment via facilitator...`);
-    console.log(`   Payment payload:`, JSON.stringify(normalizedPayment, null, 2));
-    console.log(`   Requirements:`, JSON.stringify(v2Requirements, null, 2));
+    // Build PaymentRequirements object with all required fields
+    const acceptedRequirements = payment.accepted || v2Requirements.accepts[0];
+    const paymentRequirements: any = {
+      scheme: acceptedRequirements.scheme || 'exact',
+      network: acceptedRequirements.network,
+      asset: acceptedRequirements.asset,
+      amount: acceptedRequirements.amount,
+      payTo: acceptedRequirements.payTo,
+      maxTimeoutSeconds: acceptedRequirements.maxTimeoutSeconds || 300,
+      extra: acceptedRequirements.extra || {},
+    };
 
-    // For CDP facilitator, use the accepted payment details from the payment payload
-    // This is the single PaymentRequirements object that was agreed upon
-    const paymentRequirements = payment.accepted || v2Requirements.accepts[0];
-    console.log(`   Using accepted payment as requirements:`, JSON.stringify(paymentRequirements, null, 2));
-
-    // Log the exact data being sent to CDP facilitator
-    console.log('\n🔍 CDP Facilitator Request Data:');
-    console.log('Payment payload authorization:', JSON.stringify(normalizedPayment.payload?.authorization, null, 2));
-    console.log('Payment payload signature:', normalizedPayment.payload?.signature);
-    console.log('Payment scheme:', normalizedPayment.scheme);
-    console.log('Payment network:', normalizedPayment.network);
-
-    // Get facilitator client (this also sets useCdpFacilitator flag)
     const client = getFacilitatorClient();
 
-    // IMPORTANT: Add delay before settlement for CDP facilitator
-    // After a wallet signs an ERC-3009 authorization, there's a propagation delay
-    // before CDP's verification system recognizes the signature as valid.
-    // Without this delay, gas estimation fails because the authorization is unrecognized.
-    // Increasing to 2 seconds as 1 second may be insufficient in some cases.
-    if (useCdpFacilitator) {
-      console.log('⏳ Waiting 2 seconds for signature propagation...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    // Step 1: Verify payment authorization
+    console.log(`🔍 Verifying payment...`);
+    const verifyResponse = await client.verify(normalizedPayment, paymentRequirements);
+
+    if (!verifyResponse.isValid) {
+      console.error(`❌ Verification failed: ${verifyResponse.invalidReason || 'unknown'}`);
+      return false;
     }
+
+    console.log(`✅ Payment verified successfully`);
+
+    // Step 2: Settle the verified payment
+    console.log(`⛓️  Settling payment...`);
     const settleResponse = await client.settle(normalizedPayment, paymentRequirements);
 
     if (!settleResponse.success) {
@@ -321,27 +302,13 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     }
 
     console.log(`✅ Payment settled - TX: ${settleResponse.transaction || 'N/A'}`);
-
-    // Verify the settlement
-    const verifyResponse = await client.verify(normalizedPayment, paymentRequirements);
-
-    if (verifyResponse.isValid) {
-      console.log(`✅ Payment verified on-chain`);
-      return true;
-    } else {
-      console.error(`❌ Verification failed: ${verifyResponse.invalidReason || 'unknown'}`);
-      return false;
-    }
+    return true;
   } catch (error: any) {
     console.error(`❌ Payment error: ${error.message}`);
     if (error.response) {
       console.error(`   Response status: ${error.response.status}`);
       console.error(`   Response data:`, JSON.stringify(error.response.data, null, 2));
     }
-    if (error.cause) {
-      console.error(`   Cause:`, error.cause);
-    }
-    console.error(`   Full error:`, error);
     return false;
   }
 }
