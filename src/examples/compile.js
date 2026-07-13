@@ -2,7 +2,7 @@ import { createMCPClient } from "../lib/index.js";
 
 // Create Ampersend MCP client with automatic payment handling
 const mcpServerURL = "http://localhost:8000/mcp"
-// const mcpServerURL = "https://mcp.api.remix.live/x402/mcp"
+// const mcpServerURL = "https://api.remix.live/mcp/x402/mcp"
 const { client, transport } = createMCPClient(mcpServerURL);
 
 console.log("🔌 Connecting to MCP server...");

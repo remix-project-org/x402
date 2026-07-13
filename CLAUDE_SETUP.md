@@ -71,7 +71,7 @@ You should see the executable file. Now proceed to your platform-specific setup 
 
 ```
 Claude Desktop/Code (stdio) ←→ Bridge Client ←→ Remix X402 Server (HTTP + x402)
-                                (claude-client.mjs)  (mcp.api.remix.live)
+                                (claude-client.mjs)  (api.remix.live/mcp/x402)
                                 └─ Handles x402 payments automatically
 ```
 

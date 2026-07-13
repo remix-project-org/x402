@@ -54,7 +54,7 @@ console.log = function(...args) {
 import { createInterface } from 'readline';
 import { createMCPClient } from './src/lib/index.js';
 
-const SERVER_URL = process.env.MCP_SERVER_URL || 'https://mcp.api.remix.live/x402/mcp';
+const SERVER_URL = process.env.MCP_SERVER_URL || 'https://api.remix.live/mcp/x402/mcp';
 
 // Validate private key
 if (!process.env.EVM_PRIVATE_KEY && !process.env.PRIVATE_KEY) {

@@ -1,6 +1,8 @@
-# Remix x402 MCP Server
+# MCP Server Usage Guide
 
-Welcome to the Remix x402 MCP Server! This is a **public testnet server** providing Solidity development tools powered by the x402 payment protocol. Pay for what you use with USDC on Base Sepolia testnet.
+Welcome to the Remix x402 MCP Server! This guide covers using the **MCP (Model Context Protocol) server** for AI agents like Claude.
+
+> **Note**: For HTTP REST endpoints with facilitator-based payments, see [HTTP_X402_USAGE.md](HTTP_X402_USAGE.md)
 
 > **🧪 Testnet Only**: This server currently operates on **Base Sepolia testnet only** for testing and evaluation. Mainnet support coming soon!
 
@@ -161,7 +163,7 @@ import { createMCPClient } from './src/lib/index.js';
 
 async function main() {
   // Create client (reads PRIVATE_KEY from .env)
-  const serverUrl = 'https://mcp.api.remix.live/x402/mcp';
+  const serverUrl = 'https://api.remix.live/mcp/x402/mcp';
   const { client, transport, wallet } = createMCPClient(serverUrl, {
     name: 'My-Remix-App',
     version: '1.0.0'
@@ -305,8 +307,62 @@ const result = await client.callTool({
 });
 ```
 
-## Payment Flow
+## Payment Flow (MCP with Ampersend SDK)
 
+The MCP server uses the **Ampersend SDK** for payment handling (different from HTTP server's facilitator):
+
+```
+Client                          Server                    Blockchain
+  |                               |                            |
+  |---(1) Call Tool-------------->|                            |
+  |      (via MCP)                |                            |
+  |                               |                            |
+  |                       (2) Estimate Cost                    |
+  |                       (for deployments)                    |
+  |                               |                            |
+  |<--(3) Payment Required--------|                            |
+  |      (amount, USDC address,   |                            |
+  |       network, nonce)         |                            |
+  |                               |                            |
+  |                               |                            |
+  |===(4) Create Authorization=================|              |
+  |      (EIP-3009 signature)                  |              |
+  |      Gasless - no gas for signing!         |              |
+  |                               |                            |
+  |---(5) Settle On-Chain---------|--------------------------->|
+  |      (executeTransferWithAuthorization)    |              |
+  |      YOUR WALLET pays gas for this step    |              |
+  |                               |                            |
+  |                               |                            |
+  |                               |<--(6) TX Confirmed---------|
+  |                               |      (payment verified)    |
+  |                               |                            |
+  |                       (7) Verify Settlement                |
+  |                       (read blockchain)                    |
+  |                               |                            |
+  |                       (8) Execute Tool                     |
+  |                       (compile, analyze, deploy)           |
+  |                               |                            |
+  |<--(9) Return Results----------|                            |
+  |      (compilation output,     |                            |
+  |       analysis, deployment)   |                            |
+  |                               |                            |
+```
+
+**Key Points:**
+- **Step 4**: Gasless signature creation (EIP-712) - no cost
+- **Step 5**: YOUR wallet submits transaction on-chain - YOU pay gas (~$0.50-$2.00)
+- **Step 6**: Payment settles directly on blockchain via EIP-3009
+- **Step 7**: Server verifies payment by reading blockchain
+- **Cost**: Service fee (0.01-0.02 USDC) + Gas fees (~$0.50-$2.00)
+
+**MCP vs HTTP Payment:**
+- **MCP**: Client pays gas fees (Ampersend SDK handles settlement)
+- **HTTP**: Facilitator pays gas fees (no gas cost to client!)
+- **MCP**: Simpler integration for AI agents
+- **HTTP**: Better for web apps where cost matters
+
+**Step-by-step:**
 1. **You call a tool** - The MCP client sends your request to the server
 2. **Server estimates cost** - For deployment tools, server calculates gas costs
 3. **Payment required** - Server responds with payment requirements

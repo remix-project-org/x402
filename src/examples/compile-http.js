@@ -5,10 +5,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// HTTP x402 v2 endpoint - local testing
-const httpEndpoint = "http://localhost:8002/compile";
+// HTTP x402 v2 endpoint - production
+const httpEndpoint = "https://api.remix.live/mcp/x402-http/compile";
 
-console.log("🔌 Testing HTTP x402 v2 endpoint with @x402/fetch...");
+console.log("🔌 Making payment to production HTTP x402 v2 endpoint...");
 console.log(`   Endpoint: ${httpEndpoint}`);
 
 const soliditySources = {
