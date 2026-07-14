@@ -2,7 +2,7 @@
  * Network Configuration
  *
  * This file provides centralized network configuration for the X402 MCP server.
- * To switch between networks, update the NETWORK environment variable in .env
+ * To switch between networks, update the X402_NETWORK environment variable in .env
  * or modify the defaultNetwork in tools.ts config
  */
 
@@ -69,15 +69,15 @@ export const NETWORKS: Record<string, NetworkConfig> = {
 
 /**
  * Get the active network configuration from environment
- * Defaults to configured defaultNetwork if NETWORK is not set
+ * Defaults to configured defaultNetwork if X402_NETWORK is not set
  */
 export function getActiveNetwork(): NetworkConfig {
-  const networkName = process.env.NETWORK || TOOL_CONFIG.defaultNetwork;
+  const networkName = process.env.X402_NETWORK || TOOL_CONFIG.defaultNetwork;
   const network = NETWORKS[networkName];
 
   if (!network) {
     throw new Error(
-      `Invalid NETWORK "${networkName}". Available networks: ${Object.keys(NETWORKS).join(", ")}`
+      `Invalid X402_NETWORK "${networkName}". Available networks: ${Object.keys(NETWORKS).join(", ")}`
     );
   }
 

@@ -6,7 +6,7 @@
 
 export const TOOL_CONFIG = {
   // Default Network Configuration
-  defaultNetwork: "base-sepolia", // Can be overridden by NETWORK env var
+  defaultNetwork: "base-sepolia", // Can be overridden by X402_NETWORK env var
 
   // Default RPC URLs (can be overridden by env vars)
   defaultRpcUrls: {
