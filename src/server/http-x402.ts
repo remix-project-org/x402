@@ -156,7 +156,8 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
         extra: {
           // EIP-712 domain parameters for USDC (required for EIP-3009 signatures)
           // IMPORTANT: Must match exactly what the USDC contract returns
-          name: "USDC",
+          // Base Mainnet uses "USD Coin", Base Sepolia uses "USDC"
+          name: network.chainId === 8453 ? "USD Coin" : "USDC",
           version: "2"
         }
       },
@@ -199,7 +200,8 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
         extra: {
           // EIP-712 domain parameters for USDC (required for EIP-3009 signatures)
           // IMPORTANT: Must match exactly what the USDC contract returns
-          name: "USDC",
+          // Base Mainnet uses "USD Coin", Base Sepolia uses "USDC"
+          name: network.chainId === 8453 ? "USD Coin" : "USDC",
           version: "2"
         }
       },
