@@ -61,7 +61,7 @@ try {
   console.log(`   Client configured with ExactEvmScheme`);
 
   // Register the scheme for eip155:84532 (Base Sepolia)
-  client.register("eip155:84532", exactScheme);
+  client.register("eip155:8453", exactScheme);
 
   console.log("   ✅ x402 client configured with ExactEvmScheme");
 

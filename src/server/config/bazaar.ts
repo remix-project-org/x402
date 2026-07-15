@@ -10,7 +10,12 @@ import { TOOL_CONFIG } from "./tools.js";
 
 // Get the server base URL from environment or use default
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL || "http://localhost:8000";
-const MCP_ENDPOINT = `${SERVER_BASE_URL}/mcp`;
+// MCP endpoint is separate from HTTP x402 endpoints
+// HTTP x402 endpoints are at SERVER_BASE_URL directly (e.g., /compile, /analyze)
+// MCP endpoints remain at the MCP path
+const MCP_ENDPOINT_HTTP = SERVER_BASE_URL.replace(/\/mcp\/x402-http$/, '/mcp/x402/mcp');
+// For MCP resources, strip the protocol for mcp:// URIs
+const MCP_ENDPOINT = MCP_ENDPOINT_HTTP.replace(/^https?:\/\//, '');
 
 // Get payment configuration
 const activeNetwork = getActiveNetwork();
@@ -19,8 +24,8 @@ const activeNetwork = getActiveNetwork();
  * Bazaar metadata for compile_solidity tool
  */
 export const COMPILE_SOLIDITY_METADATA = {
-  resource: `mcp://${SERVER_BASE_URL}/compile_solidity`,
-  type: "mcp" as const,
+  resource: `${SERVER_BASE_URL}/compile`,
+  type: "http" as const,
   accepts: [
     {
       asset: "USDC",
@@ -34,10 +39,10 @@ export const COMPILE_SOLIDITY_METADATA = {
     bazaar: {
       info: {
         input: {
-          type: "mcp" as const,
-          toolName: "compile_solidity",
+          type: "http" as const,
+          method: "POST",
           description: "Compile Solidity smart contracts using the Remix compiler. Supports multiple files, custom compiler versions, optimizer settings, and various EVM versions.",
-          transport: "streamable-http" as const,
+          bodyType: "json" as const,
           inputSchema: {
             type: "object",
             properties: {
@@ -141,8 +146,8 @@ contract MyToken {
  * Bazaar metadata for analyze_with_slither tool
  */
 export const ANALYZE_SLITHER_METADATA = {
-  resource: `mcp://${SERVER_BASE_URL}/analyze_with_slither`,
-  type: "mcp" as const,
+  resource: `${SERVER_BASE_URL}/analyze`,
+  type: "http" as const,
   accepts: [
     {
       asset: "USDC",
@@ -156,10 +161,10 @@ export const ANALYZE_SLITHER_METADATA = {
     bazaar: {
       info: {
         input: {
-          type: "mcp" as const,
-          toolName: "analyze_with_slither",
+          type: "http" as const,
+          method: "POST",
           description: "Run static security analysis on Solidity contracts using Slither. Detects vulnerabilities like reentrancy, unprotected functions, and code quality issues.",
-          transport: "streamable-http" as const,
+          bodyType: "json" as const,
           inputSchema: {
             type: "object",
             properties: {
@@ -247,7 +252,7 @@ contract Example {
  * Bazaar metadata for compile_and_deploy tool
  */
 export const COMPILE_DEPLOY_METADATA = {
-  resource: `mcp://${SERVER_BASE_URL}/compile_and_deploy`,
+  resource: `mcp://${MCP_ENDPOINT}/compile_and_deploy`,
   type: "mcp" as const,
   accepts: [
     {
@@ -372,7 +377,7 @@ contract Counter {
  * Bazaar metadata for compile_and_deploy_multi_network tool
  */
 export const COMPILE_DEPLOY_MULTI_METADATA = {
-  resource: `mcp://${SERVER_BASE_URL}/compile_and_deploy_multi_network`,
+  resource: `mcp://${MCP_ENDPOINT}/compile_and_deploy_multi_network`,
   type: "mcp" as const,
   accepts: [
     {
@@ -560,7 +565,7 @@ export function getBazaarDiscoveryResponse() {
     server: {
       name: "remix-x402-server",
       version: "1.0.0",
-      endpoint: MCP_ENDPOINT,
+      endpoint: MCP_ENDPOINT_HTTP,
       network: activeNetwork.name,
       chainId: activeNetwork.chainId,
     },
