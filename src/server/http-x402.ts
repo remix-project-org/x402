@@ -251,12 +251,17 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
 
     // Normalize payment object for facilitator
     // IMPORTANT: resource field is required for CDP Bazaar indexing
+    // The resource must be a ResourceInfo object with url, description, etc.
+    const resourceInfo = payment.resource && typeof payment.resource === 'object' && 'url' in payment.resource
+      ? payment.resource
+      : { url: resourceUrl, description: v2Requirements.resource?.description, mimeType: "application/json" };
+
+    // Build normalized payment payload for CDP
+    // CRITICAL: Must include extensions field with Bazaar metadata for indexing!
     const normalizedPayment = {
       x402Version: payment.x402Version,
       payload: payment.payload,
-      scheme: payment.accepted?.scheme || 'exact',
-      network: payment.accepted?.network,
-      resource: payment.resource || resourceUrl, // Fallback to provided resourceUrl if not in payment
+      resource: resourceInfo, // Must be a ResourceInfo object for Bazaar indexing
       accepted: payment.accepted || {
         asset: v2Requirements.accepts[0]?.asset,
         amount: v2Requirements.accepts[0]?.amount,
@@ -266,7 +271,10 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
         maxTimeoutSeconds: v2Requirements.accepts[0]?.maxTimeoutSeconds,
         extra: v2Requirements.accepts[0]?.extra,
       },
+      // Include Bazaar extensions from the payment or from v2Requirements
+      extensions: payment.extensions || v2Requirements.extensions,
     };
+
 
     // Build PaymentRequirements object with all required fields
     const acceptedRequirements = payment.accepted || v2Requirements.accepts[0];
@@ -432,7 +440,7 @@ contract MyToken {
     const compiler = new Compiler();
 
     // Use event-based compilation (Remix Compiler API)
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       compiler.event.register("compilationFinished", (success: boolean, data: any) => {
         const paymentResponseHeader = Buffer.from(JSON.stringify({
           status: "settled",
