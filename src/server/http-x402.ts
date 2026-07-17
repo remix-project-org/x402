@@ -238,8 +238,9 @@ function decodePaymentSignature(headerValue: string): any {
  * Verify and settle payment using CDP Facilitator
  * - Verify: Validates the EIP-3009 authorization signature
  * - Settle: Executes the USDC transfer on-chain (CDP pays gas)
+ * @param resourceUrl - The resource URL for Bazaar indexing (required for CDP catalog)
  */
-async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean> {
+async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: string): Promise<boolean> {
   try {
     const from = payment.payload?.authorization?.from;
     const to = payment.payload?.authorization?.to;
@@ -249,12 +250,18 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
     console.log(`💰 Payment: ${amount} units from ${from?.slice(0, 10)}... to ${to?.slice(0, 10)}... on ${network}`);
 
     // Normalize payment object for facilitator
+    // IMPORTANT: resource field is required for CDP Bazaar indexing
+    // The resource must be a ResourceInfo object with url, description, etc.
+    const resourceInfo = payment.resource && typeof payment.resource === 'object' && 'url' in payment.resource
+      ? payment.resource
+      : { url: resourceUrl, description: v2Requirements.resource?.description, mimeType: "application/json" };
+
+    // Build normalized payment payload for CDP
+    // CRITICAL: Must include extensions field with Bazaar metadata for indexing!
     const normalizedPayment = {
       x402Version: payment.x402Version,
       payload: payment.payload,
-      scheme: payment.accepted?.scheme || 'exact',
-      network: payment.accepted?.network,
-      resource: payment.resource,
+      resource: resourceInfo, // Must be a ResourceInfo object for Bazaar indexing
       accepted: payment.accepted || {
         asset: v2Requirements.accepts[0]?.asset,
         amount: v2Requirements.accepts[0]?.amount,
@@ -264,7 +271,10 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
         maxTimeoutSeconds: v2Requirements.accepts[0]?.maxTimeoutSeconds,
         extra: v2Requirements.accepts[0]?.extra,
       },
+      // Include Bazaar extensions from the payment or from v2Requirements
+      extensions: payment.extensions || v2Requirements.extensions,
     };
+
 
     // Build PaymentRequirements object with all required fields
     const acceptedRequirements = payment.accepted || v2Requirements.accepts[0];
@@ -319,7 +329,12 @@ async function verifyPayment(payment: any, v2Requirements: any): Promise<boolean
  * Handle /compile endpoint - Solidity compilation
  */
 async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse) {
-  const resource = `https://${req.headers.host}/compile`;
+  // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
+  // Without this, internal hostnames leak into 402 responses and payment payloads
+  if (!process.env.SERVER_BASE_URL) {
+    throw new Error("SERVER_BASE_URL environment variable is required");
+  }
+  const resource = `${process.env.SERVER_BASE_URL}/compile`;
   const amount = TOOL_CONFIG.payments.compileSolidity;
   const requirements = createPaymentRequirements(resource, amount);
 
@@ -398,7 +413,7 @@ contract MyToken {
   // Verify payment
   try {
     const payment = decodePaymentSignature(paymentSignature);
-    const isValid = await verifyPayment(payment, requirements);
+    const isValid = await verifyPayment(payment, requirements, resource);
 
     if (!isValid) {
       res.writeHead(402, { "Content-Type": "application/json" });
@@ -425,7 +440,7 @@ contract MyToken {
     const compiler = new Compiler();
 
     // Use event-based compilation (Remix Compiler API)
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       compiler.event.register("compilationFinished", (success: boolean, data: any) => {
         const paymentResponseHeader = Buffer.from(JSON.stringify({
           status: "settled",
@@ -482,7 +497,12 @@ contract MyToken {
  * Handle /analyze endpoint - Slither analysis
  */
 async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse) {
-  const resource = `https://${req.headers.host}/analyze`;
+  // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
+  // Without this, internal hostnames leak into 402 responses and payment payloads
+  if (!process.env.SERVER_BASE_URL) {
+    throw new Error("SERVER_BASE_URL environment variable is required");
+  }
+  const resource = `${process.env.SERVER_BASE_URL}/analyze`;
   const amount = TOOL_CONFIG.payments.analyzeWithSlither;
   const requirements = createPaymentRequirements(resource, amount);
 
@@ -558,7 +578,7 @@ contract Example {
 
   try {
     const payment = decodePaymentSignature(paymentSignature);
-    const isValid = await verifyPayment(payment, requirements);
+    const isValid = await verifyPayment(payment, requirements, resource);
 
     if (!isValid) {
       res.writeHead(402, { "Content-Type": "application/json" });
@@ -704,12 +724,22 @@ export function startHttpX402Server() {
   });
 
   server.listen(HTTP_X402_PORT, () => {
+    // Validate required environment variables
+    if (!process.env.SERVER_BASE_URL) {
+      console.error(`\n❌ CRITICAL: SERVER_BASE_URL environment variable is not set!`);
+      console.error(`   This is REQUIRED for correct resource URLs in production.`);
+      console.error(`   Without it, internal hostnames will leak into payment responses.`);
+      console.error(`\n🛑 HTTP x402 server will not handle requests properly without SERVER_BASE_URL\n`);
+      process.exit(1);
+    }
+
     console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
     console.log(`   POST /compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
     console.log(`   POST /analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
     console.log(`   GET  /info - Service information`);
     console.log(`   GET  /health - Health check`);
-    console.log(`\n📡 These endpoints are x402-compatible and can be validated on agentic.market`);
+    console.log(`\n🌐 Public Base URL: ${process.env.SERVER_BASE_URL}`);
+    console.log(`📡 These endpoints are x402-compatible and can be validated on agentic.market`);
   });
 
   server.on("error", (error: NodeJS.ErrnoException) => {
