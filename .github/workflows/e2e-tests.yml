@@ -35,6 +35,7 @@ jobs:
           PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
           PAY_TO_ADDRESS=${{ secrets.PAY_TO_ADDRESS }}
           SERVER_DEPLOYER_PRIVATE_KEY=${{ secrets.PRIVATE_KEY }}
+          SERVER_BASE_URL=${{ secrets.SERVER_BASE_URL }}
           NETWORK=base-sepolia
           BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
           SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
@@ -48,6 +49,7 @@ jobs:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
           SERVER_DEPLOYER_PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          SERVER_BASE_URL: ${{ secrets.SERVER_BASE_URL }}
           NETWORK: base-sepolia
           BASE_SEPOLIA_RPC_URL: https://sepolia.base.org
           SEPOLIA_RPC_URL: https://ethereum-sepolia-rpc.publicnode.com
