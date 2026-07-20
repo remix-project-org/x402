@@ -139,9 +139,9 @@ To validate on agentic.market:
 
 ### Required for Bazaar
 - `PAY_TO_ADDRESS` - Wallet address to receive payments (required for complete metadata)
+- `SERVER_BASE_URL` - Base URL for API resource identifiers (default: `http://localhost:8000`)
 
 ### Optional for Bazaar
-- `SERVER_BASE_URL` - Base URL for resource identifiers (default: `http://localhost:8000`)
 - `DISCOVERY_PORT` - Port for discovery server (default: `8001`)
 
 ## Metadata Structure

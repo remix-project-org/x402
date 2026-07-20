@@ -8,6 +8,22 @@
 import { getActiveNetwork } from "./network.js";
 import { TOOL_CONFIG } from "./tools.js";
 
+/**
+ * ============================================
+ * SERVICE METADATA - Edit this to customize how your service appears on agentic.market
+ * ============================================
+ */
+export const SERVICE_METADATA = {
+  name: "Remix IDE - Solidity Compiler & Security Analysis",
+  version: "1.0.0",
+  website: "https://remix.live",
+  description: "Professional Solidity compilation and security analysis powered by Remix IDE. Compile smart contracts and run Slither security audits",
+  tags: ["solidity", "ethereum", "smart-contracts", "security", "compilation", "remix"],
+  category: "Development Tools",
+  documentation: "https://github.com/remix-project-org/x402",
+  support: "https://github.com/remix-project-org/x402/issues",
+};
+
 // Get the server base URL from environment or use default
 const SERVER_BASE_URL = process.env.SERVER_BASE_URL || "http://localhost:8000";
 // MCP endpoint is separate from HTTP x402 endpoints
@@ -563,11 +579,17 @@ export function getBazaarDiscoveryResponse() {
     resources: getAllBazaarMetadata(),
     lastUpdated: new Date().toISOString(),
     server: {
-      name: "remix-x402-server",
-      version: "1.0.0",
+      name: SERVICE_METADATA.name,
+      version: SERVICE_METADATA.version,
       endpoint: MCP_ENDPOINT_HTTP,
       network: activeNetwork.name,
       chainId: activeNetwork.chainId,
+      website: SERVICE_METADATA.website,
+      description: SERVICE_METADATA.description,
+      tags: SERVICE_METADATA.tags,
+      category: SERVICE_METADATA.category,
+      documentation: SERVICE_METADATA.documentation,
+      support: SERVICE_METADATA.support,
     },
   };
 }
