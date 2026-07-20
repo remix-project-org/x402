@@ -249,26 +249,9 @@ A **facilitator** is a payment settlement service that:
 
 ### Server-Side Facilitator Configuration
 
-The server automatically selects which facilitator to use based on environment variables:
+The server uses the CDP Facilitator for payment settlement:
 
-#### Option 1: x402.org Facilitator (Default - Testnet)
-
-**Automatically used when:** No CDP credentials are configured
-
-```bash
-# No additional environment variables needed
-# Server automatically uses x402.org facilitator
-```
-
-- **URL**: `https://x402.org/facilitator`
-- **Networks**: Base Sepolia testnet only
-- **Authentication**: None required
-- **Cost**: Free for testing
-- **Best for**: Development and testing
-
-#### Option 2: CDP Facilitator (Production-Ready)
-
-**Automatically used when:** CDP credentials are detected
+#### CDP Facilitator (Required)
 
 ```bash
 # Set these environment variables on the server
@@ -280,21 +263,17 @@ CDP_API_KEY_SECRET=your_api_key_secret
 - **Networks**: All networks (testnet + mainnet)
 - **Authentication**: JWT with Ed25519 signing
 - **Cost**: Per transaction (gas fees paid by facilitator)
-- **Best for**: Production deployments
+- **Best for**: Development and production deployments
 
 **How to get CDP credentials:**
 1. Sign up at [Coinbase Developer Platform](https://portal.cdp.coinbase.com/)
 2. Create a new API key
 3. Set `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET` environment variables
-4. Restart the server - it will automatically use CDP facilitator
+4. Start the server - it will use CDP facilitator
 
 **Server startup log will show:**
 ```
 🔐 Facilitator: CDP - https://api.cdp.coinbase.com/platform/v2/x402
-```
-or
-```
-🔐 Facilitator: x402.org - https://x402.org/facilitator
 ```
 
 ### CDP Facilitator Benefits

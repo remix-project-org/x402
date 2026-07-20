@@ -22,71 +22,62 @@ const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X4
 // Facilitator Configuration
 // The facilitator settles payments on behalf of the server (facilitator pays gas)
 //
-// Option 1: x402.org facilitator (testnet only, no auth required)
-//   - URL: https://x402.org/facilitator
-//   - Networks: Base Sepolia, Solana Devnet
-//   - Authentication: None
-//   - Use for: Testing and development
-//
-// Option 2: CDP facilitator (testnet + mainnet, requires CDP API keys)
+// CDP facilitator (testnet + mainnet, requires CDP API keys)
 //   - URL: https://api.cdp.coinbase.com/platform/v2/x402
 //   - Networks: All supported networks
 //   - Authentication: CDP_API_KEY_ID and CDP_API_KEY_SECRET required
-//   - Use for: Production or if you need more than testnet
 //
 // Lazy-load facilitator client to ensure env vars are loaded
 let facilitatorClient: HTTPFacilitatorClient | null = null;
-
-// Module-level flag to track if we're using CDP facilitator
-// This needs to be accessible in verifyPayment() for the 1-second delay
-let useCdpFacilitator = false;
 
 function getFacilitatorClient(): HTTPFacilitatorClient {
   if (facilitatorClient) {
     return facilitatorClient;
   }
 
-  // Check for CDP credentials (loaded by dotenv in index.ts)
-  useCdpFacilitator = !!(process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET);
-  const FACILITATOR_URL = useCdpFacilitator
-    ? "https://api.cdp.coinbase.com/platform/v2/x402"
-    : "https://x402.org/facilitator";
+  // Check for required CDP credentials
+  if (!process.env.CDP_API_KEY_ID || !process.env.CDP_API_KEY_SECRET) {
+    throw new Error(
+      "CDP_API_KEY_ID and CDP_API_KEY_SECRET environment variables are required. " +
+      "Get your credentials at https://portal.cdp.coinbase.com/"
+    );
+  }
 
-  console.log(`🔐 Facilitator: ${useCdpFacilitator ? 'CDP' : 'x402.org'} - ${FACILITATOR_URL}`);
+  const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
-  // Create HTTPFacilitatorClient with CDP authentication if available
+  console.log(`🔐 Facilitator: CDP - ${FACILITATOR_URL}`);
+
+  // Create HTTPFacilitatorClient with CDP authentication
   // CDP requires JWT bearer tokens signed with Ed25519 for each request
   facilitatorClient = new HTTPFacilitatorClient({
     url: FACILITATOR_URL,
-    ...(useCdpFacilitator ? {
-      createAuthHeaders: async () => {
-        // Generate JWT bearer tokens for CDP authentication
-        // Each operation needs a separate JWT with the correct request path
-        const generateAuthHeader = async (requestPath: string) => {
-          const jwt = await generateJwt({
-            apiKeyId: process.env.CDP_API_KEY_ID!,
-            apiKeySecret: process.env.CDP_API_KEY_SECRET!,
-            requestMethod: 'POST',
-            requestHost: 'api.cdp.coinbase.com',
-            requestPath: requestPath,
-          });
-          return { 'Authorization': `Bearer ${jwt}` };
-        };
+    createAuthHeaders: async () => {
+      // Generate JWT bearer tokens for CDP authentication
+      // Each operation needs a separate JWT with the correct request path
+      const generateAuthHeader = async (requestPath: string) => {
+        const jwt = await generateJwt({
+          apiKeyId: process.env.CDP_API_KEY_ID!,
+          apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+          requestMethod: 'POST',
+          requestHost: 'api.cdp.coinbase.com',
+          requestPath: requestPath,
+        });
+        return { 'Authorization': `Bearer ${jwt}` };
+      };
 
-        // Generate tokens for each operation
-        const [verifyHeaders, settleHeaders, supportedHeaders] = await Promise.all([
-          generateAuthHeader('/platform/v2/x402/verify'),
-          generateAuthHeader('/platform/v2/x402/settle'),
-          generateAuthHeader('/platform/v2/x402/supported'),
-        ]);
+      // Generate tokens for each operation
+      const [verifyHeaders, settleHeaders, supportedHeaders] = await Promise.all([
+        generateAuthHeader('/platform/v2/x402/verify'),
+        generateAuthHeader('/platform/v2/x402/settle'),
+        generateAuthHeader('/platform/v2/x402/supported'),
+      ]);
 
-        return {
-          verify: verifyHeaders,
-          settle: settleHeaders,
-          supported: supportedHeaders,
-        };
-      }
-    } : {})
+      return {
+        verify: verifyHeaders,
+        settle: settleHeaders,
+        supported: supportedHeaders,
+      };
+    }
   });
 
   return facilitatorClient;
