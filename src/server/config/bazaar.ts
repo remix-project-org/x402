@@ -17,6 +17,7 @@ export const SERVICE_METADATA = {
   name: "Remix IDE - Solidity Compiler & Security Analysis",
   version: "1.0.0",
   website: "https://remix.live",
+  logo: "https://remix.ethereum.org/assets/img/remix-logo-blue.png",  // Logo URL (PNG, JPG, or SVG recommended)
   description: "Professional Solidity compilation and security analysis powered by Remix IDE. Compile smart contracts and run Slither security audits",
   tags: ["solidity", "ethereum", "smart-contracts", "security", "compilation", "remix"],
   category: "Development Tools",
@@ -585,6 +586,7 @@ export function getBazaarDiscoveryResponse() {
       network: activeNetwork.name,
       chainId: activeNetwork.chainId,
       website: SERVICE_METADATA.website,
+      logo: SERVICE_METADATA.logo,
       description: SERVICE_METADATA.description,
       tags: SERVICE_METADATA.tags,
       category: SERVICE_METADATA.category,
