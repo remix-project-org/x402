@@ -14,11 +14,11 @@ import { TOOL_CONFIG } from "./tools.js";
  * ============================================
  */
 export const SERVICE_METADATA = {
-  name: "Remix IDE - Solidity Compiler & Security Analysis",
+  name: "Remix Project",
   version: "1.0.0",
   website: "https://remix.live",
   logo: "https://remix.ethereum.org/assets/img/remix-logo-blue.png",  // Logo URL (PNG, JPG, or SVG recommended)
-  description: "Professional Solidity compilation and security analysis powered by Remix IDE. Compile smart contracts and run Slither security audits",
+  description: "Professional Solidity compilation and security analysis services, powered by Remix Project. Compile smart contracts and run Slither security audits",
   tags: ["solidity", "ethereum", "smart-contracts", "security", "compilation", "remix"],
   category: "Development Tools",
   documentation: "https://github.com/remix-project-org/x402",
@@ -43,6 +43,7 @@ const activeNetwork = getActiveNetwork();
 export const COMPILE_SOLIDITY_METADATA = {
   resource: `${SERVER_BASE_URL}/compile`,
   type: "http" as const,
+  description: "Compile Solidity smart contracts using the Remix compiler. Supports multiple files, custom compiler versions, optimizer settings, and various EVM versions.",
   accepts: [
     {
       asset: "USDC",
@@ -165,6 +166,7 @@ contract MyToken {
 export const ANALYZE_SLITHER_METADATA = {
   resource: `${SERVER_BASE_URL}/analyze`,
   type: "http" as const,
+  description: "Run static security analysis on Solidity contracts using Slither. Detects vulnerabilities like reentrancy, unprotected functions, and code quality issues.",
   accepts: [
     {
       asset: "USDC",
@@ -271,6 +273,7 @@ contract Example {
 export const COMPILE_DEPLOY_METADATA = {
   resource: `mcp://${MCP_ENDPOINT}/compile_and_deploy`,
   type: "mcp" as const,
+  description: "Compile and deploy a smart contract to a blockchain network. The server handles deployment using a delegated deployer. Supports constructor arguments, post-deployment calls, and multiple networks. Dynamic pricing based on gas costs.",
   accepts: [
     {
       asset: "USDC",
@@ -396,6 +399,7 @@ contract Counter {
 export const COMPILE_DEPLOY_MULTI_METADATA = {
   resource: `mcp://${MCP_ENDPOINT}/compile_and_deploy_multi_network`,
   type: "mcp" as const,
+  description: "Compile once and deploy to multiple blockchain networks simultaneously. Ideal for cross-chain deployments. Dynamic pricing based on total gas costs across all networks.",
   accepts: [
     {
       asset: "USDC",
