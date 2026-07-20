@@ -43,7 +43,7 @@ const activeNetwork = getActiveNetwork();
 export const COMPILE_SOLIDITY_METADATA = {
   resource: `${SERVER_BASE_URL}/compile`,
   type: "http" as const,
-  description: "Compile Solidity smart contracts using the Remix compiler. Supports multiple files, custom compiler versions, optimizer settings, and various EVM versions.",
+  description: "Compile Solidity smart contracts using the Remix compiler. Supports multiple files, custom compiler versions, optimizer settings, and various EVM versions. Parameters: sources (required), version (optional), settings (optional with optimizer and evmVersion).",
   accepts: [
     {
       asset: "USDC",
@@ -66,13 +66,13 @@ export const COMPILE_SOLIDITY_METADATA = {
             properties: {
               sources: {
                 type: "object",
-                description: "Map of filename to source code content",
+                description: "Map of filename to source code content. Each key is a filename (e.g., 'MyContract.sol') and value is an object with 'content' field containing the Solidity source code.",
                 additionalProperties: {
                   type: "object",
                   properties: {
                     content: {
                       type: "string",
-                      description: "Solidity source code",
+                      description: "Solidity source code for this file",
                     },
                   },
                   required: ["content"],
@@ -80,20 +80,33 @@ export const COMPILE_SOLIDITY_METADATA = {
               },
               version: {
                 type: "string",
-                description: "Solidity compiler version (e.g., 'v0.8.35+commit.47b9dedd')",
+                description: "Solidity compiler version to use (e.g., 'v0.8.35+commit.47b9dedd'). Optional - uses default if not provided.",
+                default: "v0.8.35+commit.47b9dedd"
               },
               settings: {
                 type: "object",
+                description: "Optional compiler settings for optimization and EVM version. Can include 'optimizer' (with 'enabled' and 'runs' fields) and 'evmVersion'.",
                 properties: {
                   optimizer: {
                     type: "object",
+                    description: "Optimizer configuration",
                     properties: {
-                      enabled: { type: "boolean" },
-                      runs: { type: "number" },
+                      enabled: {
+                        type: "boolean",
+                        description: "Enable/disable optimizer",
+                        default: false
+                      },
+                      runs: {
+                        type: "number",
+                        description: "Number of optimization runs",
+                        default: 200
+                      },
                     },
                   },
                   evmVersion: {
                     type: "string",
+                    description: "Target EVM version for compilation",
+                    default: "paris",
                     enum: ["homestead", "tangerineWhistle", "spuriousDragon", "byzantium", "constantinople", "petersburg", "istanbul", "berlin", "london", "paris", "shanghai", "osaka"],
                   },
                 },
@@ -189,31 +202,34 @@ export const ANALYZE_SLITHER_METADATA = {
             properties: {
               sources: {
                 type: "object",
-                description: "Map of filename to source code content",
+                description: "Map of filename to source code content. Each key is a filename (e.g., 'Contract.sol') and value is an object with 'content' field.",
                 additionalProperties: {
                   type: "object",
                   properties: {
-                    content: { type: "string" },
+                    content: {
+                      type: "string",
+                      description: "Solidity source code for this file"
+                    },
                   },
                   required: ["content"],
                 },
               },
               version: {
                 type: "string",
-                description: "Solidity compiler version",
+                description: "Solidity compiler version to use for analysis (e.g., 'v0.8.35+commit.47b9dedd'). If not provided, uses default version.",
               },
               detectors: {
                 type: "array",
                 items: { type: "string" },
-                description: "Specific Slither detectors to run",
+                description: "Specific Slither detectors to run. Leave empty to run all detectors.",
               },
               excludeLow: {
                 type: "boolean",
-                description: "Exclude low severity findings",
+                description: "Set to true to exclude low severity findings from results",
               },
               excludeInformational: {
                 type: "boolean",
-                description: "Exclude informational findings",
+                description: "Set to true to exclude informational findings from results",
               },
             },
             required: ["sources"],
