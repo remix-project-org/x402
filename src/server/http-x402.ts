@@ -170,7 +170,7 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
 /**
  * Create v2 payment requirements for header
  */
-function createPaymentRequirements(resource: string, amount: string, extensions?: any) {
+function createPaymentRequirements(resource: string, amount: string, extensions?: any, description?: string) {
   const network = getActiveNetwork();
   const payToAddress = validatePayToAddress(process.env.PAY_TO_ADDRESS);
 
@@ -179,6 +179,7 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
     resource: {
       url: resource,
       mimeType: "application/json",
+      ...(description && { description }),
     },
     accepts: [
       {
@@ -327,72 +328,73 @@ async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse
   }
   const resource = `${process.env.SERVER_BASE_URL}/compile`;
   const amount = TOOL_CONFIG.payments.compileSolidity;
-  const requirements = createPaymentRequirements(resource, amount);
+  const description = "Compile Solidity smart contracts using the Remix compiler";
+
+  // Define schemas and examples once for reuse
+  const inputSchema = {
+    type: "object",
+    properties: {
+      sources: {
+        type: "object",
+        description: "Map of filename to source code",
+        additionalProperties: {
+          type: "object",
+          properties: {
+            content: { type: "string" }
+          },
+          required: ["content"]
+        }
+      },
+      version: { type: "string", description: "Solidity compiler version" },
+      settings: { type: "object", description: "Compiler settings" }
+    },
+    required: ["sources"]
+  };
+
+  const inputExample = {
+    sources: {
+      "MyToken.sol": {
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyToken {
+    string public name = "MyToken";
+}`
+      }
+    },
+    version: "v0.8.35+commit.47b9dedd"
+  };
+
+  const outputExample = {
+    success: true,
+    contracts: {
+      "MyToken.sol": {
+        MyToken: {
+          abi: [],
+          evm: { bytecode: { object: "0x608060405..." } }
+        }
+      }
+    },
+    version: "v0.8.35+commit.47b9dedd"
+  };
+
+  // Create v2Response and requirements with extensions
+  const v2Response = createPaymentRequiredResponse(
+    resource,
+    description,
+    amount,
+    inputSchema,
+    inputExample,
+    outputExample
+  );
+
+  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description);
 
   // Check for payment signature
   const paymentSignature = req.headers["payment-signature"] as string;
 
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
-    const inputSchema = {
-      type: "object",
-      properties: {
-        sources: {
-          type: "object",
-          description: "Map of filename to source code",
-          additionalProperties: {
-            type: "object",
-            properties: {
-              content: { type: "string" }
-            },
-            required: ["content"]
-          }
-        },
-        version: { type: "string", description: "Solidity compiler version" },
-        settings: { type: "object", description: "Compiler settings" }
-      },
-      required: ["sources"]
-    };
-
-    const inputExample = {
-      sources: {
-        "MyToken.sol": {
-          content: `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract MyToken {
-    string public name = "MyToken";
-}`
-        }
-      },
-      version: "v0.8.35+commit.47b9dedd"
-    };
-
-    const outputExample = {
-      success: true,
-      contracts: {
-        "MyToken.sol": {
-          MyToken: {
-            abi: [],
-            evm: { bytecode: { object: "0x608060405..." } }
-          }
-        }
-      },
-      version: "v0.8.35+commit.47b9dedd"
-    };
-
-    const v2Response = createPaymentRequiredResponse(
-      resource,
-      "Compile Solidity smart contracts using the Remix compiler",
-      amount,
-      inputSchema,
-      inputExample,
-      outputExample
-    );
-
-    // Include extensions in the header as well
-    const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions);
-
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
@@ -404,7 +406,7 @@ contract MyToken {
   // Verify payment
   try {
     const payment = decodePaymentSignature(paymentSignature);
-    const isValid = await verifyPayment(payment, requirements, resource);
+    const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
 
     if (!isValid) {
       res.writeHead(402, { "Content-Type": "application/json" });
@@ -435,8 +437,8 @@ contract MyToken {
       compiler.event.register("compilationFinished", (success: boolean, data: any) => {
         const paymentResponseHeader = Buffer.from(JSON.stringify({
           status: "settled",
-          network: requirements.accepts[0]!.network,
-          amount: requirements.accepts[0]!.amount,
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
         })).toString("base64");
 
         if (success) {
@@ -495,38 +497,35 @@ async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse
   }
   const resource = `${process.env.SERVER_BASE_URL}/analyze`;
   const amount = TOOL_CONFIG.payments.analyzeWithSlither;
-  const requirements = createPaymentRequirements(resource, amount);
+  const description = "Run static security analysis on Solidity contracts using Slither";
 
-  const paymentSignature = req.headers["payment-signature"] as string;
-
-  if (!paymentSignature) {
-    // No payment - return 402 with v2 payment requirements
-    const inputSchema = {
-      type: "object",
-      properties: {
-        sources: {
-          type: "object",
-          description: "Map of filename to source code",
-          additionalProperties: {
-            type: "object",
-            properties: {
-              content: { type: "string" }
-            },
-            required: ["content"]
-          }
-        },
-        version: { type: "string", description: "Solidity compiler version" },
-        detectors: { type: "array", items: { type: "string" }, description: "Specific Slither detectors" },
-        excludeLow: { type: "boolean", description: "Exclude low severity findings" },
-        excludeInformational: { type: "boolean", description: "Exclude informational findings" }
-      },
-      required: ["sources"]
-    };
-
-    const inputExample = {
+  // Define schemas and examples once for reuse
+  const inputSchema = {
+    type: "object",
+    properties: {
       sources: {
-        "Contract.sol": {
-          content: `// SPDX-License-Identifier: MIT
+        type: "object",
+        description: "Map of filename to source code",
+        additionalProperties: {
+          type: "object",
+          properties: {
+            content: { type: "string" }
+          },
+          required: ["content"]
+        }
+      },
+      version: { type: "string", description: "Solidity compiler version" },
+      detectors: { type: "array", items: { type: "string" }, description: "Specific Slither detectors" },
+      excludeLow: { type: "boolean", description: "Exclude low severity findings" },
+      excludeInformational: { type: "boolean", description: "Exclude informational findings" }
+    },
+    required: ["sources"]
+  };
+
+  const inputExample = {
+    sources: {
+      "Contract.sol": {
+        content: `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 contract Example {
@@ -536,29 +535,33 @@ contract Example {
         value = _value;
     }
 }`
-        }
-      },
-      version: "v0.8.35+commit.47b9dedd"
-    };
+      }
+    },
+    version: "v0.8.35+commit.47b9dedd"
+  };
 
-    const outputExample = {
-      success: true,
-      summary: { totalFindings: 0, high: 0, medium: 0, low: 0 },
-      findings: []
-    };
+  const outputExample = {
+    success: true,
+    summary: { totalFindings: 0, high: 0, medium: 0, low: 0 },
+    findings: []
+  };
 
-    const v2Response = createPaymentRequiredResponse(
-      resource,
-      "Run static security analysis on Solidity contracts using Slither",
-      amount,
-      inputSchema,
-      inputExample,
-      outputExample
-    );
+  // Create v2Response and requirements with extensions
+  const v2Response = createPaymentRequiredResponse(
+    resource,
+    description,
+    amount,
+    inputSchema,
+    inputExample,
+    outputExample
+  );
 
-    // Include extensions in the header as well
-    const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions);
+  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description);
 
+  const paymentSignature = req.headers["payment-signature"] as string;
+
+  if (!paymentSignature) {
+    // No payment - return 402 with v2 payment requirements
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
@@ -569,7 +572,7 @@ contract Example {
 
   try {
     const payment = decodePaymentSignature(paymentSignature);
-    const isValid = await verifyPayment(payment, requirements, resource);
+    const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
 
     if (!isValid) {
       res.writeHead(402, { "Content-Type": "application/json" });
@@ -676,8 +679,8 @@ contract Example {
       "Content-Type": "application/json",
       "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
         status: "settled",
-        network: requirements.accepts[0]!.network,
-        amount: requirements.accepts[0]!.amount,
+        network: requirementsWithExtensions.accepts[0]!.network,
+        amount: requirementsWithExtensions.accepts[0]!.amount,
       })).toString("base64"),
     });
 
