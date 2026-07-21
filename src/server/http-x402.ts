@@ -589,21 +589,88 @@ contract Example {
     // Call Remix Slither API
     console.log(`🔍 Running Slither analysis...`);
 
-    const response = await fetch("https://remix.ethereum.org/api/slither/analyse", {
+    const response = await fetch(TOOL_CONFIG.slither.apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sources,
-        compilerVersion: version || "0.8.35",
-        slitherOptions: {
-          detectors: detectors || [],
-          excludeLow: excludeLow || false,
-          excludeInformational: excludeInformational || false,
-        },
+        version: version || TOOL_CONFIG.slither.defaultVersion,
       }),
     });
 
-    const analysisData = await response.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Slither API error (${response.status}): ${errorText.substring(0, 200)}`);
+    }
+
+    const slitherResult = await response.json();
+
+    // Parse the Remix API response (same logic as MCP tool)
+    let analysisResult;
+
+    if (slitherResult && slitherResult.success && slitherResult.analysis) {
+      // The analysis field is a JSON string, parse it first
+      const analysisText = slitherResult.analysis as string;
+      let analysisData;
+      try {
+        analysisData = JSON.parse(analysisText);
+      } catch (parseError: any) {
+        throw new Error(`Failed to parse analysis result: ${parseError.message}`);
+      }
+
+      const findings: any[] = [];
+
+      // Check if we have JSON-based results (new format)
+      if (analysisData.results && analysisData.results.detectors && Array.isArray(analysisData.results.detectors)) {
+        // Extract findings from the JSON detectors array
+        for (const detector of analysisData.results.detectors) {
+          findings.push({
+            check: detector.check,
+            impact: detector.impact,
+            confidence: detector.confidence,
+            description: detector.description || detector.markdown,
+          });
+        }
+      }
+
+      // Apply client-side filters if requested
+      let filteredFindings = findings;
+      if (excludeInformational) {
+        filteredFindings = filteredFindings.filter((f: any) => f.impact !== 'Informational');
+      }
+      if (excludeLow) {
+        filteredFindings = filteredFindings.filter((f: any) => f.impact !== 'Low');
+      }
+      if (detectors && detectors.length > 0) {
+        filteredFindings = filteredFindings.filter((f: any) =>
+          detectors.includes(f.check)
+        );
+      }
+
+      const summary = {
+        totalFindings: filteredFindings.length,
+        high: filteredFindings.filter((f: any) => f.impact === 'High').length,
+        medium: filteredFindings.filter((f: any) => f.impact === 'Medium').length,
+        low: filteredFindings.filter((f: any) => f.impact === 'Low').length,
+        informational: filteredFindings.filter((f: any) => f.impact === 'Informational').length,
+      };
+
+      analysisResult = {
+        success: true,
+        summary,
+        findings: filteredFindings,
+      };
+    } else if (slitherResult && !slitherResult.success) {
+      analysisResult = {
+        success: false,
+        error: slitherResult.error || slitherResult.message || "Slither analysis failed",
+      };
+    } else {
+      analysisResult = {
+        success: false,
+        error: "Invalid response format from Remix API",
+      };
+    }
 
     res.writeHead(200, {
       "Content-Type": "application/json",
@@ -614,10 +681,7 @@ contract Example {
       })).toString("base64"),
     });
 
-    res.end(JSON.stringify({
-      success: true,
-      ...analysisData,
-    }));
+    res.end(JSON.stringify(analysisResult));
 
   } catch (error: any) {
     console.error("Analysis error:", error);

@@ -12,6 +12,8 @@
     "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
     "test:verbose": "node --experimental-vm-modules node_modules/.bin/jest --verbose",
     "example:compile": "node src/examples/compile.js",
+    "example:compile-http": "node src/examples/compile-http.js",
+    "example:analyze-http": "node src/examples/analyze-http.js",
     "example:slither": "node src/examples/slither.js",
     "example:deploy": "node src/examples/deploy.js",
     "example:deploy-and-call": "node src/examples/deploy-and-call.js",
