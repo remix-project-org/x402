@@ -15,6 +15,20 @@ const examples = {
     cost: "0.01 USDC",
     script: "example:compile"
   },
+  "compile-http": {
+    name: "Compile Solidity (HTTP/Production)",
+    file: "compile-http.js",
+    description: "Compile contracts via production HTTP x402 endpoint",
+    cost: "0.01 USDC",
+    script: "example:compile-http"
+  },
+  "analyze-http": {
+    name: "Slither Analysis (HTTP/Production)",
+    file: "analyze-http.js",
+    description: "Run security analysis via production HTTP x402 endpoint",
+    cost: "0.02 USDC",
+    script: "example:analyze-http"
+  },
   slither: {
     name: "Slither Security Analysis",
     file: "slither.js",
