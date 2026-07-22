@@ -14,6 +14,7 @@ import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
 import { TOOL_CONFIG } from "./config/tools.js";
+import { SERVICE_METADATA } from "./config/bazaar.js";
 import { Compiler } from "@remix-project/remix-solidity";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
 
@@ -135,6 +136,9 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
       url: resourceUrl,
       description: description,
       mimeType: "application/json",
+      serviceName: SERVICE_METADATA.name,
+      tags: SERVICE_METADATA.tags,
+      iconUrl: SERVICE_METADATA.logo,
     },
     accepts: [
       {
@@ -180,6 +184,9 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
       url: resource,
       mimeType: "application/json",
       ...(description && { description }),
+      serviceName: SERVICE_METADATA.name,
+      tags: SERVICE_METADATA.tags,
+      iconUrl: SERVICE_METADATA.logo,
     },
     accepts: [
       {
