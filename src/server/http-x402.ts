@@ -136,10 +136,12 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
       url: resourceUrl,
       description: description,
       mimeType: "application/json",
-      serviceName: SERVICE_METADATA.name,
-      tags: SERVICE_METADATA.tags,
-      iconUrl: SERVICE_METADATA.logo,
     },
+    // Service metadata at top level for CDP Bazaar indexing
+    description: description,
+    serviceName: SERVICE_METADATA.name,
+    tags: SERVICE_METADATA.tags,
+    iconUrl: SERVICE_METADATA.logo,
     accepts: [
       {
         asset: network.usdcAddress,
@@ -184,10 +186,12 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
       url: resource,
       mimeType: "application/json",
       ...(description && { description }),
-      serviceName: SERVICE_METADATA.name,
-      tags: SERVICE_METADATA.tags,
-      iconUrl: SERVICE_METADATA.logo,
     },
+    // Service metadata at top level for CDP Bazaar indexing
+    ...(description && { description }),
+    serviceName: SERVICE_METADATA.name,
+    tags: SERVICE_METADATA.tags,
+    iconUrl: SERVICE_METADATA.logo,
     accepts: [
       {
         asset: network.usdcAddress,
