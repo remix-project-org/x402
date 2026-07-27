@@ -138,7 +138,7 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
       mimeType: "application/json",
     },
     // Service metadata at top level for CDP Bazaar indexing
-    description: description,
+    description: SERVICE_METADATA.description,
     serviceName: SERVICE_METADATA.name,
     tags: SERVICE_METADATA.tags,
     iconUrl: SERVICE_METADATA.logo,
@@ -188,7 +188,7 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
       ...(description && { description }),
     },
     // Service metadata at top level for CDP Bazaar indexing
-    ...(description && { description }),
+    description: SERVICE_METADATA.description,
     serviceName: SERVICE_METADATA.name,
     tags: SERVICE_METADATA.tags,
     iconUrl: SERVICE_METADATA.logo,
@@ -339,7 +339,7 @@ async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse
   }
   const resource = `${process.env.SERVER_BASE_URL}/compile`;
   const amount = TOOL_CONFIG.payments.compileSolidity;
-  const description = "Compile Solidity smart contracts using the Remix compiler";
+  const description = "Compile Solidity contracts with the Remix compiler, supporting multiple files, custom versions, and optimization settings";
 
   // Define schemas and examples once for reuse
   const inputSchema = {
@@ -508,7 +508,7 @@ async function handleAnalyze(req: http.IncomingMessage, res: http.ServerResponse
   }
   const resource = `${process.env.SERVER_BASE_URL}/analyze`;
   const amount = TOOL_CONFIG.payments.analyzeWithSlither;
-  const description = "Run static security analysis on Solidity contracts using Slither";
+  const description = "Security analysis powered by Slither to detect vulnerabilities, reentrancy issues, and smart contract code quality problems";
 
   // Define schemas and examples once for reuse
   const inputSchema = {
