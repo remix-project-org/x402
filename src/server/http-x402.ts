@@ -14,7 +14,7 @@ import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
 import { TOOL_CONFIG } from "./config/tools.js";
-import { SERVICE_METADATA } from "./config/bazaar.js";
+import { SERVICE_METADATA, COMPILE_SOLIDITY_METADATA, ANALYZE_SLITHER_METADATA } from "./config/bazaar.js";
 import { Compiler } from "@remix-project/remix-solidity";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
 
@@ -126,7 +126,7 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
 /**
  * Create x402 v2 payment required response
  */
-function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string, inputSchema: any, inputExample: any, outputExample: any) {
+function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string, inputSchema: any, inputExample: any, outputExample: any, endpointTags?: string[]) {
   const network = getActiveNetwork();
   const payToAddress = validatePayToAddress(process.env.PAY_TO_ADDRESS);
 
@@ -140,7 +140,7 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
     // Service metadata at top level for CDP Bazaar indexing
     description: SERVICE_METADATA.description,
     serviceName: SERVICE_METADATA.name,
-    tags: SERVICE_METADATA.tags,
+    tags: endpointTags || SERVICE_METADATA.tags,
     iconUrl: SERVICE_METADATA.logo,
     accepts: [
       {
@@ -176,7 +176,7 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
 /**
  * Create v2 payment requirements for header
  */
-function createPaymentRequirements(resource: string, amount: string, extensions?: any, description?: string) {
+function createPaymentRequirements(resource: string, amount: string, extensions?: any, description?: string, endpointTags?: string[]) {
   const network = getActiveNetwork();
   const payToAddress = validatePayToAddress(process.env.PAY_TO_ADDRESS);
 
@@ -190,7 +190,7 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
     // Service metadata at top level for CDP Bazaar indexing
     description: SERVICE_METADATA.description,
     serviceName: SERVICE_METADATA.name,
-    tags: SERVICE_METADATA.tags,
+    tags: endpointTags || SERVICE_METADATA.tags,
     iconUrl: SERVICE_METADATA.logo,
     accepts: [
       {
@@ -390,16 +390,18 @@ contract MyToken {
   };
 
   // Create v2Response and requirements with extensions
+  const endpointTags = COMPILE_SOLIDITY_METADATA.tags;
   const v2Response = createPaymentRequiredResponse(
     resource,
     description,
     amount,
     inputSchema,
     inputExample,
-    outputExample
+    outputExample,
+    endpointTags
   );
 
-  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description);
+  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
 
   // Check for payment signature
   const paymentSignature = req.headers["payment-signature"] as string;
@@ -558,16 +560,18 @@ contract Example {
   };
 
   // Create v2Response and requirements with extensions
+  const endpointTags = ANALYZE_SLITHER_METADATA.tags;
   const v2Response = createPaymentRequiredResponse(
     resource,
     description,
     amount,
     inputSchema,
     inputExample,
-    outputExample
+    outputExample,
+    endpointTags
   );
 
-  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description);
+  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
 
   const paymentSignature = req.headers["payment-signature"] as string;
 
