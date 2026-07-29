@@ -772,21 +772,21 @@ export function startHttpX402Server() {
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
 
     try {
-      // Route requests
-      if (url.pathname === "/compile" && req.method === "POST") {
+      // Route requests - support both root paths and /mcp/x402-http prefix
+      if ((url.pathname === "/compile" || url.pathname === "/mcp/x402-http/compile") && req.method === "POST") {
         await handleCompile(req, res);
-      } else if (url.pathname === "/analyze" && req.method === "POST") {
+      } else if ((url.pathname === "/analyze" || url.pathname === "/mcp/x402-http/analyze") && req.method === "POST") {
         await handleAnalyze(req, res);
-      } else if (url.pathname === "/" || url.pathname === "/info") {
+      } else if (url.pathname === "/" || url.pathname === "/info" || url.pathname === "/mcp/x402-http" || url.pathname === "/mcp/x402-http/") {
         handleInfo(req, res);
-      } else if (url.pathname === "/health") {
+      } else if (url.pathname === "/health" || url.pathname === "/mcp/x402-http/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: "healthy" }));
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           error: "Not found",
-          availableEndpoints: ["/", "/compile", "/analyze", "/health"],
+          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/health"],
         }));
       }
     } catch (error: any) {
@@ -807,10 +807,11 @@ export function startHttpX402Server() {
     }
 
     console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
-    console.log(`   POST /compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
-    console.log(`   POST /analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
-    console.log(`   GET  /info - Service information`);
-    console.log(`   GET  /health - Health check`);
+    console.log(`   POST /mcp/x402-http/compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
+    console.log(`   POST /mcp/x402-http/analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
+    console.log(`   GET  /mcp/x402-http/ - Service information`);
+    console.log(`   GET  /mcp/x402-http/health - Health check`);
+    console.log(`\n   Also supports root paths: /compile, /analyze, /health`);
     console.log(`\n🌐 Public Base URL: ${process.env.SERVER_BASE_URL}`);
     console.log(`📡 These endpoints are x402-compatible and can be validated on agentic.market`);
   });
