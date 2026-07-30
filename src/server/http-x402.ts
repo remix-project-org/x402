@@ -274,6 +274,11 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
         maxTimeoutSeconds: v2Requirements.accepts[0]?.maxTimeoutSeconds,
         extra: v2Requirements.accepts[0]?.extra,
       },
+      // Include service-level metadata for CDP Bazaar cataloging
+      description: v2Requirements.description,
+      serviceName: v2Requirements.serviceName,
+      tags: v2Requirements.tags,
+      iconUrl: v2Requirements.iconUrl,
       // Include Bazaar extensions from the payment or from v2Requirements
       extensions: payment.extensions || v2Requirements.extensions,
     };
