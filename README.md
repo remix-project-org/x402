@@ -34,6 +34,13 @@ This is a **multi-protocol server implementation** that provides paid Solidity d
   - **No gas fees for clients!** ✅
   - Production-ready with CDP
 
+**For Coinbase Agentic Wallet Users:**
+- 💰 **[Agentic Wallet Integration Guide →](AGENTIC_WALLET_INTEGRATION.md)**
+  - Use `awal` CLI with x402 services
+  - AI agent integration (Claude Desktop)
+  - Automated payment handling
+  - **No gas fees for clients!** ✅
+
 ### 📚 Reference Documentation
 - 🖥️ **[Claude Setup Guide](CLAUDE_SETUP.md)** - Connect to Claude Desktop or Claude Code CLI
 - 📘 **[API Reference](API_REFERENCE.md)** - Complete API specs for all 4 tools
