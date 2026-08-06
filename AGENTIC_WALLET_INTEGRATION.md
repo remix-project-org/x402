@@ -2,6 +2,19 @@
 
 This guide shows how to use the HTTP x402 endpoints for Solidity compilation and security analysis using the **Coinbase Agentic Wallet CLI** for payments.
 
+## About Coinbase Agentic Wallet
+
+The Coinbase Agentic Wallet CLI (`awal`) provides a simple way to interact with x402 payment-enabled services without managing private keys yourself.
+
+**How Authentication Works:**
+- **Email OTP**: Authenticate using a one-time passcode sent to your email (no password required)
+- **Wallet Creation**: A wallet is automatically created for you on first authentication
+- **Private Keys**: Stored securely in Coinbase infrastructure - you never see or manage them directly
+- **Self-Custody**: You control the wallet through the CLI without accessing private keys
+- **Security**: Built-in spending limits, KYT screening, and OFAC compliance
+
+This is different from traditional Web3 wallets where you manage your own private keys. With `awal`, Coinbase securely manages the keys while you retain full control over transactions.
+
 ## Overview
 
 The x402 protocol enables pay-per-use API access with on-chain payments. This integration combines:
@@ -10,6 +23,30 @@ The x402 protocol enables pay-per-use API access with on-chain payments. This in
 - **Facilitator Service**: Manages payment settlement (you don't pay gas fees!)
 
 ## Available Services
+
+You can discover Remix services using the x402 Bazaar:
+
+```bash
+npx awal x402 bazaar search "remix.live"
+```
+
+**Output:**
+```
+Found 2 results
+
+https://api.remix.live/mcp/x402-http/compile
+Compile Solidity contracts with the Remix compiler, supporting multiple files, custom versions, and optimization settings
+Price: 0.01 USDC
+Network: eip155:8453
+Scheme: exact
+---
+https://api.remix.live/mcp/x402-http/analyze
+Security analysis powered by Slither to detect vulnerabilities, reentrancy issues, and smart contract code quality problems
+Price: 0.02 USDC
+Network: eip155:8453
+Scheme: exact
+---
+```
 
 ### POST /compile
 Compile Solidity smart contracts
