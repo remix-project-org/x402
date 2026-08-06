@@ -36,88 +36,15 @@ If not authenticated, follow the prompts to set up your wallet.
 
 Get your wallet address and send USDC on Base (testnet or mainnet).
 
-### 3. Make Your First Request
+### 3. Usage Examples
 
-Try the `awal x402 pay` command to compile a simple contract:
-
-```bash
-npx awal x402 pay "https://api.remix.live/mcp/x402-http/compile" \
-  --method POST \
-  --data '{
-    "sources": {
-      "Test.sol": {
-        "content": "pragma solidity ^0.8.0; contract Test { uint256 public value = 42; }"
-      }
-    },
-    "version": "v0.8.35+commit.47b9dedd"
-  }'
-```
-
-**That's it!** The `awal x402 pay` command handles all payment flow automatically:
+Use the `awal x402 pay` command to interact with the HTTP x402 endpoints. The command handles all payment flow automatically:
 - Detects 402 Payment Required
 - Signs payment (gasless - no gas fees for you!)
 - Retries request with payment proof
 - Returns the result
 
-### 4. Optional: Install Skills for AI Agent Integration
-
-For automated AI agent usage, install the skills package:
-
-```bash
-npx skills add coinbase/agentic-wallet-skills
-```
-
-This enables AI agents like Claude to automatically handle x402 payments.
-
-## Using Agentic Wallet CLI with x402 Services
-
-### Method 1: AI Agent Integration (Recommended)
-
-#### Setup Claude Desktop
-
-Add to your Claude Desktop MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "agentic-wallet": {
-      "command": "npx",
-      "args": ["-y", "@coinbase/agentic-wallet-mcp"]
-    }
-  }
-}
-```
-
-#### Example Prompts
-
-**Compile:**
-```
-Compile this Solidity contract using https://api.remix.live/mcp/x402-http/compile
-
-pragma solidity ^0.8.0;
-contract SimpleStorage { uint256 public value; }
-```
-
-**Analyze:**
-```
-Analyze this contract using https://api.remix.live/mcp/x402-http/analyze
-
-pragma solidity ^0.8.0;
-contract Vault {
-    mapping(address => uint256) public balances;
-    function withdraw() public {
-        uint256 amount = balances[msg.sender];
-        msg.sender.call{value: amount}("");
-        balances[msg.sender] = 0;
-    }
-}
-```
-
-Claude automatically handles authentication, payment, and returns results.
-
-### Method 2: Direct CLI Usage
-
-**Compile:**
+#### Compile a Contract
 
 ```bash
 npx awal x402 pay "https://api.remix.live/mcp/x402-http/compile" \
@@ -132,7 +59,7 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/compile" \
   }'
 ```
 
-**Analyze:**
+#### Analyze a Contract with Slither
 
 ```bash
 npx awal x402 pay "https://api.remix.live/mcp/x402-http/analyze" \
