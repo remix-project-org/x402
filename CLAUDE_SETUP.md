@@ -2,6 +2,23 @@
 
 This guide shows how to connect the Remix X402 MCP server to **both Claude Desktop and Claude Code CLI** with automatic x402 payment support.
 
+## Choose Your Wallet Method
+
+**Option 1: Coinbase Agentic Wallet (Recommended for most users)**
+- ✅ No private key management
+- ✅ Email authentication only
+- ✅ No gas fees
+- ✅ Built-in spending limits
+- **→ [Use Agentic Wallet Guide](CLAUDE_AGENTIC_WALLET_GUIDE.md)**
+
+**Option 2: Self-Managed Wallet (This guide)**
+- ⚙️ You manage your own private key
+- ⚙️ Direct wallet control
+- ⚙️ Requires USDC + ETH for gas
+- **→ Continue reading below**
+
+---
+
 **Choose your platform:**
 - [Claude Desktop Setup](#claude-desktop-setup) - GUI application
 - [Claude Code CLI Setup](#claude-code-cli-setup) - Terminal interface
@@ -366,9 +383,28 @@ Deploy this contract to Base Sepolia, Optimism Sepolia, and Arbitrum Sepolia
 
 ---
 
+## Alternative: Using Coinbase Agentic Wallet
+
+If you prefer **not to manage private keys** yourself, you can use the Coinbase Agentic Wallet MCP server instead:
+
+**📱 [Coinbase Agentic Wallet Guide →](CLAUDE_AGENTIC_WALLET_GUIDE.md)**
+
+**Key differences:**
+- ✅ **No private key management** - Coinbase securely manages keys
+- ✅ **Email authentication** - Sign in with OTP codes
+- ✅ **Gasless payments** - No ETH needed for gas
+- ✅ **Built-in safety** - Spending limits and compliance checks
+- ✅ **Same services** - Access to all Remix.live compilation and analysis tools
+
+The Agentic Wallet is ideal for users who want a simpler, more secure setup without managing private keys directly.
+
+---
+
 ## Additional Resources
 
-- [USAGE.md](USAGE.md) - Detailed examples and workflows
-- [API_REFERENCE.md](API_REFERENCE.md) - Complete tool specifications
-- [README.md](README.md) - Architecture and implementation details
-- [GitHub Issues](https://github.com/remix-project-org/x402/issues) - Support
+- **[CLAUDE_AGENTIC_WALLET_GUIDE.md](CLAUDE_AGENTIC_WALLET_GUIDE.md)** - Using Coinbase Agentic Wallet (no private keys!)
+- **[AGENTIC_WALLET_INTEGRATION.md](AGENTIC_WALLET_INTEGRATION.md)** - Agentic Wallet CLI usage
+- **[MCP_USAGE.md](MCP_USAGE.md)** - MCP server programmatic usage
+- **[API_REFERENCE.md](API_REFERENCE.md)** - Complete tool specifications
+- **[README.md](README.md)** - Architecture and implementation details
+- **[GitHub Issues](https://github.com/remix-project-org/x402/issues)** - Support
