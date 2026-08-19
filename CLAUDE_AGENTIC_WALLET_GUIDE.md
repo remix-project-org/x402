@@ -37,7 +37,7 @@ Before you begin, ensure you have:
 - **Claude Desktop** (for desktop usage) OR **Claude Code CLI** (for terminal usage)
 - **Node.js** 18+ installed
 - **An email address** for authentication
-- **USDC on Base network** for payments (can start with testnet)
+- **USDC on Base network** (Base mainnet) for payments (can start with testnet)
 
 ## Installation & Setup
 
@@ -140,9 +140,9 @@ After installation, verify the server is configured:
 
 You should see `payments-mcp` in the list with its health status.
 
-## Authentication
+## Wallet Authentication
 
-The first time you use the wallet, you'll need to authenticate:
+The first time you use the Coinbase's Agentic wallet, you'll need to authenticate:
 
 ### Sign In Flow
 
@@ -178,7 +178,7 @@ The first time you use the wallet, you'll need to authenticate:
 
 ## Using Remix Project Services
 
-Remix project provides Solidity development tools through the x402 Bazaar marketplace. Claude can discover and use these services automatically.
+The Remix Project provides Solidity development tools through the x402 Bazaar marketplace. Claude can discover and use these services automatically.
 
 ### Compile Solidity Contracts
 
@@ -189,7 +189,7 @@ Remix project provides Solidity development tools through the x402 Bazaar market
 Simply ask Claude:
 
 ```
-compile a simple storage contract using remix.live services
+compile a simple storage contract using remix.live bazaar services
 ```
 
 Claude will:
@@ -270,7 +270,7 @@ Slither is a powerful static analysis tool that detects vulnerabilities and code
 #### Example 1: Analyze a Vulnerable Contract
 
 ```
-analyze this contract for security vulnerabilities using remix.live:
+analyze this contract for security vulnerabilities using remix.live bazaar service:
 
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
