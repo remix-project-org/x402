@@ -17,6 +17,7 @@ import { TOOL_CONFIG } from "./config/tools.js";
 import { SERVICE_METADATA, COMPILE_SOLIDITY_METADATA, ANALYZE_SLITHER_METADATA } from "./config/bazaar.js";
 import { Compiler } from "@remix-project/remix-solidity";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
+import { OpenRouter } from "@openrouter/sdk";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
@@ -717,6 +718,212 @@ contract Example {
 }
 
 /**
+ * Handle /openrouter endpoint - OpenRouter AI prompts for smart contract analysis
+ */
+async function handleOpenRouter(req: http.IncomingMessage, res: http.ServerResponse) {
+  // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
+  if (!process.env.SERVER_BASE_URL) {
+    throw new Error("SERVER_BASE_URL environment variable is required");
+  }
+  const resource = `${process.env.SERVER_BASE_URL}/openrouter`;
+  const amount = TOOL_CONFIG.payments.openRouter;
+  const description = "AI-powered smart contract analysis and generation using OpenRouter's auto-beta model";
+
+  // Define schemas and examples
+  const inputSchema = {
+    type: "object",
+    properties: {
+      sources: {
+        type: "object",
+        description: "Map of filename to source code (for contract analysis)",
+        additionalProperties: {
+          type: "object",
+          properties: {
+            content: { type: "string" }
+          },
+          required: ["content"]
+        }
+      },
+      prompt: {
+        type: "string",
+        description: "The prompt or question about the contract (e.g., 'Explain this contract', 'Find vulnerabilities', 'Optimize this code')"
+      },
+      task: {
+        type: "string",
+        description: "Task type: 'analyze', 'explain', 'optimize', 'generate', or 'custom'",
+        enum: ["analyze", "explain", "optimize", "generate", "custom"]
+      },
+      maxTokens: {
+        type: "number",
+        description: "Maximum number of tokens in the response (optional, default: 2000)",
+      },
+    },
+    required: ["prompt"]
+  };
+
+  const inputExample = {
+    sources: {
+      "MyToken.sol": {
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyToken {
+    string public name = "MyToken";
+    mapping(address => uint256) public balances;
+
+    function mint(address to, uint256 amount) public {
+        balances[to] += amount;
+    }
+}`
+      }
+    },
+    prompt: "Analyze this token contract for potential security issues",
+    task: "analyze"
+  };
+
+  const outputExample = {
+    success: true,
+    response: "This is a basic ERC20-style token contract. Here are the security concerns...",
+    model: "openrouter/auto-beta",
+    tokensUsed: 156
+  };
+
+  // Create v2Response and requirements with extensions
+  const endpointTags = [""];
+  const v2Response = createPaymentRequiredResponse(
+    resource,
+    description,
+    amount,
+    inputSchema,
+    inputExample,
+    outputExample,
+    endpointTags
+  );
+
+  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
+
+  // Check for payment signature
+  const paymentSignature = req.headers["payment-signature"] as string;
+
+  if (!paymentSignature) {
+    // No payment - return 402 with v2 payment requirements
+    res.writeHead(402, {
+      "Content-Type": "application/json",
+      "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
+    });
+    res.end(JSON.stringify(v2Response, null, 2));
+    return;
+  }
+
+  // Verify payment
+  try {
+    const payment = decodePaymentSignature(paymentSignature);
+    const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
+
+    if (!isValid) {
+      res.writeHead(402, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid or unconfirmed payment" }));
+      return;
+    }
+
+    // Payment verified - send request to OpenRouter
+    const body = await parseBody(req);
+    const { sources, prompt, task, maxTokens } = body;
+
+    if (!prompt) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing required field: prompt" }));
+      return;
+    }
+
+    // Check for OpenRouter API key
+    if (!process.env.OPENROUTER_API_KEY) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "OpenRouter API key not configured",
+        details: "OPENROUTER_API_KEY environment variable is required"
+      }));
+      return;
+    }
+
+    console.log(`🤖 Sending contract analysis request to OpenRouter...`);
+    console.log(`   Task: ${task || 'custom'}`);
+    if (sources) {
+      console.log(`   Contract files: ${Object.keys(sources).join(', ')}`);
+    }
+
+    // Initialize OpenRouter SDK
+    const openrouter = new OpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY
+    });
+
+    // Build the user message content
+    let userMessage = prompt;
+
+    // If sources are provided, include them in the prompt
+    if (sources && typeof sources === 'object') {
+      userMessage = `${prompt}\n\nHere are the smart contract files to analyze:\n\n`;
+
+      for (const [filename, fileData] of Object.entries(sources)) {
+        if (fileData && typeof fileData === 'object' && 'content' in fileData) {
+          userMessage += `### File: ${filename}\n\`\`\`solidity\n${fileData.content}\n\`\`\`\n\n`;
+        }
+      }
+    }
+
+    // Call OpenRouter API using SDK
+    const result = await openrouter.chat.send({
+      chatRequest: {
+        model: TOOL_CONFIG.openRouter.model,
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert Solidity smart contract auditor and developer. Analyze contracts for security issues, gas optimization opportunities, and best practices. Provide clear, actionable feedback."
+          },
+          {
+            role: "user",
+            content: userMessage
+          }
+        ],
+        maxTokens: maxTokens || TOOL_CONFIG.openRouter.maxTokens,
+        stream: false
+      }
+    });
+
+    // Extract response from OpenRouter SDK result
+    const responseData = result as any;
+    const aiResponse = responseData.choices?.[0]?.message?.content || "No response generated";
+    const tokensUsed = responseData.usage?.total_tokens || 0;
+
+    const paymentResponseHeader = Buffer.from(JSON.stringify({
+      status: "settled",
+      network: requirementsWithExtensions.accepts[0]!.network,
+      amount: requirementsWithExtensions.accepts[0]!.amount,
+    })).toString("base64");
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": paymentResponseHeader,
+    });
+
+    res.end(JSON.stringify({
+      success: true,
+      response: aiResponse,
+      model: TOOL_CONFIG.openRouter.model,
+      tokensUsed: tokensUsed
+    }));
+
+  } catch (error: any) {
+    console.error("OpenRouter error:", error);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "OpenRouter request failed",
+      details: error.message,
+    }));
+  }
+}
+
+/**
  * Handle /info endpoint - Service information
  */
 function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
@@ -740,6 +947,12 @@ function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
         method: "POST",
         price: `${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC`,
         description: "Security analysis with Slither",
+      },
+      openrouter: {
+        path: "/openrouter",
+        method: "POST",
+        price: `${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC`,
+        description: "AI-powered smart contract analysis with OpenRouter",
       },
     },
     network: network.displayName,
@@ -782,6 +995,8 @@ export function startHttpX402Server() {
         await handleCompile(req, res);
       } else if ((url.pathname === "/analyze" || url.pathname === "/mcp/x402-http/analyze") && req.method === "POST") {
         await handleAnalyze(req, res);
+      } else if ((url.pathname === "/openrouter" || url.pathname === "/mcp/x402-http/openrouter") && req.method === "POST") {
+        await handleOpenRouter(req, res);
       } else if (url.pathname === "/" || url.pathname === "/info" || url.pathname === "/mcp/x402-http" || url.pathname === "/mcp/x402-http/") {
         handleInfo(req, res);
       } else if (url.pathname === "/health" || url.pathname === "/mcp/x402-http/health") {
@@ -791,7 +1006,7 @@ export function startHttpX402Server() {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           error: "Not found",
-          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/health"],
+          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/openrouter", "/mcp/x402-http/health"],
         }));
       }
     } catch (error: any) {
@@ -814,9 +1029,10 @@ export function startHttpX402Server() {
     console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
     console.log(`   POST /mcp/x402-http/compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
     console.log(`   POST /mcp/x402-http/analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
+    console.log(`   POST /mcp/x402-http/openrouter - OpenRouter AI (${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC)`);
     console.log(`   GET  /mcp/x402-http/ - Service information`);
     console.log(`   GET  /mcp/x402-http/health - Health check`);
-    console.log(`\n   Also supports root paths: /compile, /analyze, /health`);
+    console.log(`\n   Also supports root paths: /compile, /analyze, /openrouter, /health`);
     console.log(`\n🌐 Public Base URL: ${process.env.SERVER_BASE_URL}`);
     console.log(`📡 These endpoints are x402-compatible and can be validated on agentic.market`);
   });

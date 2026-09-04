@@ -1266,6 +1266,13 @@
   resolved "https://registry.yarnpkg.com/@noble/hashes/-/hashes-2.2.0.tgz#22da1d16a469954fce877055d559900a6c73b63b"
   integrity sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==
 
+"@openrouter/sdk@^1.2.100":
+  version "1.2.100"
+  resolved "https://registry.yarnpkg.com/@openrouter/sdk/-/sdk-1.2.100.tgz#a1a4fdcb0b86d1f51790c40d01989fd1195e837d"
+  integrity sha512-AOaom06hFT/4pFw1XE+VeyHud2PM44mbxRVpFM0+4iP505OBW3AIhkXCIn32d2YKShH0MnU5/ORwY8sM4mCBhQ==
+  dependencies:
+    zod "^3.25.0 || ^4.0.0"
+
 "@paulmillr/qr@^0.2.1":
   version "0.2.1"
   resolved "https://registry.yarnpkg.com/@paulmillr/qr/-/qr-0.2.1.tgz#76ade7080be4ac4824f638146fd8b6db1805eeca"
@@ -7660,6 +7667,11 @@ zod@^3.23.8, zod@^3.24.2, zod@^3.25.76:
   version "4.3.6"
   resolved "https://registry.yarnpkg.com/zod/-/zod-4.3.6.tgz#89c56e0aa7d2b05107d894412227087885ab112a"
   integrity sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==
+
+"zod@^3.25.0 || ^4.0.0":
+  version "4.5.4"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-4.5.4.tgz#e215c62420c528dd7951e31fb52c5438f1fd184a"
+  integrity sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==
 
 zustand@5.0.0:
   version "5.0.0"
