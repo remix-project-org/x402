@@ -14,6 +14,7 @@
     "example:compile": "node src/examples/compile.js",
     "example:compile-http": "node src/examples/compile-http.js",
     "example:analyze-http": "node src/examples/analyze-http.js",
+    "example:openrouter-http": "node src/examples/openrouter-http.js",
     "example:slither": "node src/examples/slither.js",
     "example:deploy": "node src/examples/deploy.js",
     "example:deploy-and-call": "node src/examples/deploy-and-call.js",
@@ -33,6 +34,7 @@
   "dependencies": {
     "@ampersend_ai/ampersend-sdk": "^0.0.16",
     "@coinbase/cdp-sdk": "^1.51.2",
+    "@openrouter/sdk": "^1.2.100",
     "@remix-project/remix-solidity": "^0.5.76",
     "@x402/core": "^2.17.0",
     "@x402/evm": "^2.17.0",
