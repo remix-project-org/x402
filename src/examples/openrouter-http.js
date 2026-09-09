@@ -17,7 +17,7 @@ dotenv.config();
 
 // Use local server for testing (production endpoint not deployed yet)
 const SERVER_URL = "http://localhost:8002";
-const OPENROUTER_ENDPOINT = `${SERVER_URL}/openrouter`;
+const OPENROUTER_ENDPOINT = `${SERVER_URL}/get_audit_checklist`;
 
 console.log("🤖 OpenRouter Smart Contract Analyzer");
 console.log(`📡 Endpoint: ${OPENROUTER_ENDPOINT}`);

@@ -718,14 +718,14 @@ contract Example {
 }
 
 /**
- * Handle /openrouter endpoint - OpenRouter AI prompts for smart contract analysis
+ * Handle /get_audit_checklist endpoint - OpenRouter AI prompts for smart contract analysis
  */
-async function handleOpenRouter(req: http.IncomingMessage, res: http.ServerResponse) {
+async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.ServerResponse) {
   // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
   if (!process.env.SERVER_BASE_URL) {
     throw new Error("SERVER_BASE_URL environment variable is required");
   }
-  const resource = `${process.env.SERVER_BASE_URL}/openrouter`;
+  const resource = `${process.env.SERVER_BASE_URL}/get_audit_checklist`;
   const amount = TOOL_CONFIG.payments.openRouter;
   const description = "AI-powered smart contract analysis and generation using OpenRouter's auto-beta model";
 
@@ -948,8 +948,8 @@ function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
         price: `${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC`,
         description: "Security analysis with Slither",
       },
-      openrouter: {
-        path: "/openrouter",
+      get_audit_checklist: {
+        path: "/get_audit_checklist",
         method: "POST",
         price: `${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC`,
         description: "AI-powered smart contract analysis with OpenRouter",
@@ -995,8 +995,8 @@ export function startHttpX402Server() {
         await handleCompile(req, res);
       } else if ((url.pathname === "/analyze" || url.pathname === "/mcp/x402-http/analyze") && req.method === "POST") {
         await handleAnalyze(req, res);
-      } else if ((url.pathname === "/openrouter" || url.pathname === "/mcp/x402-http/openrouter") && req.method === "POST") {
-        await handleOpenRouter(req, res);
+      } else if ((url.pathname === "/get_audit_checklist" || url.pathname === "/mcp/x402-http/get_audit_checklist") && req.method === "POST") {
+        await handleGetAuditChecklist(req, res);
       } else if (url.pathname === "/" || url.pathname === "/info" || url.pathname === "/mcp/x402-http" || url.pathname === "/mcp/x402-http/") {
         handleInfo(req, res);
       } else if (url.pathname === "/health" || url.pathname === "/mcp/x402-http/health") {
@@ -1006,7 +1006,7 @@ export function startHttpX402Server() {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           error: "Not found",
-          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/openrouter", "/mcp/x402-http/health"],
+          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/get_audit_checklist", "/mcp/x402-http/health"],
         }));
       }
     } catch (error: any) {
@@ -1029,10 +1029,10 @@ export function startHttpX402Server() {
     console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
     console.log(`   POST /mcp/x402-http/compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
     console.log(`   POST /mcp/x402-http/analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
-    console.log(`   POST /mcp/x402-http/openrouter - OpenRouter AI (${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC)`);
+    console.log(`   POST /mcp/x402-http/get_audit_checklist - Get Audit checklist AI (${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC)`);
     console.log(`   GET  /mcp/x402-http/ - Service information`);
     console.log(`   GET  /mcp/x402-http/health - Health check`);
-    console.log(`\n   Also supports root paths: /compile, /analyze, /openrouter, /health`);
+    console.log(`\n   Also supports root paths: /compile, /analyze, /get_audit_checklist, /health`);
     console.log(`\n🌐 Public Base URL: ${process.env.SERVER_BASE_URL}`);
     console.log(`📡 These endpoints are x402-compatible and can be validated on agentic.market`);
   });
