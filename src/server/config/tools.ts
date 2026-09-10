@@ -32,10 +32,18 @@ export const TOOL_CONFIG = {
     defaultVersion: "0.8.35+commit.47b9dedd"
   },
 
+  // OpenRouter Configuration
+  openRouter: {
+    apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+    model: "openrouter/auto-beta",
+    maxTokens: 2000
+  },
+
   // Payment Configuration (amounts in USDC with 6 decimals)
   payments: {
     compileSolidity: "10000",        // 0.01 USDC
     analyzeWithSlither: "20000",     // 0.02 USDC
+    openRouter: "50000",             // 0.05 USDC
     compileAndDeploy: {
       baseFee: "50000",              // 0.05 USDC (minimum/fallback)
       baseFeeUsd: 0.05,              // Base service fee in USD
