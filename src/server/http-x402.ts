@@ -18,6 +18,14 @@ import { SERVICE_METADATA, COMPILE_SOLIDITY_METADATA, ANALYZE_SLITHER_METADATA }
 import { Compiler } from "@remix-project/remix-solidity";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
 import { OpenRouter } from "@openrouter/sdk";
+import {
+  loadAuditChecklist,
+  flattenCategoriesForPrompt,
+  generateCategoryListPrompt,
+  stripToSkeleton,
+  formatAuditReportMarkdown,
+  type AuditMatch
+} from "./utils/audit-checklist.js";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
@@ -727,7 +735,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
   }
   const resource = `${process.env.SERVER_BASE_URL}/get_audit_checklist`;
   const amount = TOOL_CONFIG.payments.openRouter;
-  const description = "AI-powered smart contract analysis and generation using OpenRouter's auto-beta model";
+  const description = "AI-powered smart contract audit checklist matching using OpenRouter - analyzes contract code and returns relevant security checklist items as markdown";
 
   // Define schemas and examples
   const inputSchema = {
@@ -735,7 +743,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
     properties: {
       sources: {
         type: "object",
-        description: "Map of filename to source code (for contract analysis)",
+        description: "Map of filename to source code. Required. At least one contract file must be provided.",
         additionalProperties: {
           type: "object",
           properties: {
@@ -744,21 +752,14 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
           required: ["content"]
         }
       },
-      prompt: {
-        type: "string",
-        description: "The prompt or question about the contract (e.g., 'Explain this contract', 'Find vulnerabilities', 'Optimize this code')"
-      },
-      task: {
-        type: "string",
-        description: "Task type: 'analyze', 'explain', 'optimize', 'generate', or 'custom'",
-        enum: ["analyze", "explain", "optimize", "generate", "custom"]
-      },
-      maxTokens: {
+      maxCategories: {
         type: "number",
-        description: "Maximum number of tokens in the response (optional, default: 2000)",
-      },
+        description: "Maximum number of audit categories to match (default: 12, max: 20)",
+        minimum: 1,
+        maximum: 20
+      }
     },
-    required: ["prompt"]
+    required: ["sources"]
   };
 
   const inputExample = {
@@ -777,19 +778,19 @@ contract MyToken {
 }`
       }
     },
-    prompt: "Analyze this token contract for potential security issues",
-    task: "analyze"
+    maxCategories: 12
   };
 
   const outputExample = {
     success: true,
-    response: "This is a basic ERC20-style token contract. Here are the security concerns...",
+    markdown: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol...",
+    matchedCategories: 5,
     model: "openrouter/auto-beta",
-    tokensUsed: 156
+    tokensUsed: 3456
   };
 
   // Create v2Response and requirements with extensions
-  const endpointTags = [""];
+  const endpointTags = ["security", "audit", "solidity", "smart-contract"];
   const v2Response = createPaymentRequiredResponse(
     resource,
     description,
@@ -826,13 +827,13 @@ contract MyToken {
       return;
     }
 
-    // Payment verified - send request to OpenRouter
+    // Payment verified - process audit checklist request
     const body = await parseBody(req);
-    const { sources, prompt, task, maxTokens } = body;
+    const { sources, maxCategories = 12 } = body;
 
-    if (!prompt) {
+    if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: prompt" }));
+      res.end(JSON.stringify({ error: "Missing required field: sources. At least one contract file is required." }));
       return;
     }
 
@@ -846,54 +847,115 @@ contract MyToken {
       return;
     }
 
-    console.log(`🤖 Sending contract analysis request to OpenRouter...`);
-    console.log(`   Task: ${task || 'custom'}`);
-    if (sources) {
-      console.log(`   Contract files: ${Object.keys(sources).join(', ')}`);
+    console.log(`🔍 Processing audit checklist request...`);
+    console.log(`   Contract files: ${Object.keys(sources).join(', ')}`);
+    console.log(`   Max categories: ${maxCategories}`);
+
+    // Load and prepare the audit checklist
+    const checklist = loadAuditChecklist();
+    const flattenedCategories = flattenCategoriesForPrompt(checklist);
+    const categoryListPrompt = generateCategoryListPrompt(flattenedCategories);
+
+    console.log(`   Loaded ${flattenedCategories.length} audit categories from checklist`);
+
+    // Process each contract and strip to skeleton
+    const contractSkeletons: { filename: string; skeleton: string }[] = [];
+    for (const [filename, fileData] of Object.entries(sources)) {
+      if (fileData && typeof fileData === 'object' && 'content' in fileData) {
+        const skeleton = stripToSkeleton((fileData as any).content);
+        contractSkeletons.push({ filename, skeleton });
+      }
     }
+
+    // Build the user message with all contract skeletons
+    let contractsSection = '';
+    for (const { filename, skeleton } of contractSkeletons) {
+      contractsSection += `\n# Contract: ${filename}\n\`\`\`solidity\n${skeleton}\n\`\`\`\n`;
+    }
+
+    const userMessage = `# Audit categories — choose ONLY from these ${flattenedCategories.length} paths\n${categoryListPrompt}\n${contractsSection}\nReturn at most ${maxCategories} matches, each with a path copied verbatim from the list above.`;
+
+    const systemMessage = `You map a Solidity contract onto a security-audit checklist taxonomy.
+
+You are given a contract SKELETON (declarations only — function bodies have been stripped) and a fixed list of audit categories. Select every category whose checklist items would plausibly produce findings for this contract.
+
+Rules:
+1. Each "path" MUST be copied character-for-character from the supplied category list. Never invent, rename, merge, split, abbreviate or re-case a path, and never emit a parent category that is not itself in the list.
+2. Base every match on evidence visible in the skeleton — an import, an inherited base, a state variable, an event, a modifier or a function signature. Do not speculate about what the stripped function bodies might contain.
+3. Prefer the specific over the generic: if a protocol-specific interface is imported, match that integration's category as well as the general one.
+4. Also include cross-cutting categories (access control, external calls, centralisation, low-level operations, compiler-version concerns) when the skeleton shows the corresponding surface area.
+5. Return at most the requested number of categories, ordered most to least confident, with no duplicates.
+6. "reason" is ONE short sentence naming the specific evidence, e.g. "Inherits ERC20 and defines _mint/_burn." Do not restate the category name.
+7. "confidence" is high when the feature is unmistakable, medium when likely, low when plausible but weakly evidenced.
+8. If nothing applies — the file is an interface, a library, or holds no contract — return an empty "matches" array and set "skipped_reason".
+
+Return a JSON object with this structure:
+{
+  "matches": [
+    { "path": "exact category path", "reason": "brief evidence", "confidence": "high|medium|low" }
+  ],
+  "skipped_reason": "optional explanation if no matches"
+}`;
 
     // Initialize OpenRouter SDK
     const openrouter = new OpenRouter({
       apiKey: process.env.OPENROUTER_API_KEY
     });
 
-    // Build the user message content
-    let userMessage = prompt;
+    console.log(`🤖 Sending audit matching request to OpenRouter...`);
 
-    // If sources are provided, include them in the prompt
-    if (sources && typeof sources === 'object') {
-      userMessage = `${prompt}\n\nHere are the smart contract files to analyze:\n\n`;
-
-      for (const [filename, fileData] of Object.entries(sources)) {
-        if (fileData && typeof fileData === 'object' && 'content' in fileData) {
-          userMessage += `### File: ${filename}\n\`\`\`solidity\n${fileData.content}\n\`\`\`\n\n`;
-        }
-      }
-    }
-
-    // Call OpenRouter API using SDK
+    // Call OpenRouter API with structured prompt
     const result = await openrouter.chat.send({
       chatRequest: {
         model: TOOL_CONFIG.openRouter.model,
         messages: [
           {
             role: "system",
-            content: "You are an expert Solidity smart contract auditor and developer. Analyze contracts for security issues, gas optimization opportunities, and best practices. Provide clear, actionable feedback."
+            content: systemMessage
           },
           {
             role: "user",
             content: userMessage
           }
         ],
-        maxTokens: maxTokens || TOOL_CONFIG.openRouter.maxTokens,
-        stream: false
+        maxTokens: 32768,
+        temperature: 0.7,
+        stream: false,
+        responseFormat: {
+          type: "json_object"
+        }
       }
     });
 
     // Extract response from OpenRouter SDK result
     const responseData = result as any;
-    const aiResponse = responseData.choices?.[0]?.message?.content || "No response generated";
+    const aiResponse = responseData.choices?.[0]?.message?.content || "{}";
     const tokensUsed = responseData.usage?.total_tokens || 0;
+
+    console.log(`✅ Received response from OpenRouter (${tokensUsed} tokens)`);
+
+    // Parse AI response
+    let matches: AuditMatch[] = [];
+    let skippedReason: string | undefined;
+
+    try {
+      const parsed = JSON.parse(aiResponse);
+      matches = parsed.matches || [];
+      skippedReason = parsed.skipped_reason;
+      console.log(`   Matched ${matches.length} categories`);
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", parseError);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Failed to parse AI response",
+        details: String(parseError)
+      }));
+      return;
+    }
+
+    // Generate markdown report
+    const contractName = contractSkeletons.map(c => c.filename).join(', ');
+    const markdownReport = formatAuditReportMarkdown(matches, flattenedCategories, contractName);
 
     const paymentResponseHeader = Buffer.from(JSON.stringify({
       status: "settled",
@@ -908,16 +970,18 @@ contract MyToken {
 
     res.end(JSON.stringify({
       success: true,
-      response: aiResponse,
+      markdown: markdownReport,
+      matchedCategories: matches.length,
+      skippedReason: skippedReason,
       model: TOOL_CONFIG.openRouter.model,
       tokensUsed: tokensUsed
     }));
 
   } catch (error: any) {
-    console.error("OpenRouter error:", error);
+    console.error("Audit checklist error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "OpenRouter request failed",
+      error: "Audit checklist request failed",
       details: error.message,
     }));
   }
