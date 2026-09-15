@@ -44,6 +44,7 @@ export const TOOL_CONFIG = {
     compileSolidity: "10000",        // 0.01 USDC
     analyzeWithSlither: "20000",     // 0.02 USDC
     openRouter: "50000",             // 0.05 USDC
+    doAudit: "100000",               // 0.10 USDC (full audit report)
     compileAndDeploy: {
       baseFee: "50000",              // 0.05 USDC (minimum/fallback)
       baseFeeUsd: 0.05,              // Base service fee in USD

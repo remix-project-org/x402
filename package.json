@@ -17,6 +17,8 @@
     "example:slither": "node src/examples/slither.js",
     "example:deploy": "node src/examples/deploy.js",
     "example:deploy-and-call": "node src/examples/deploy-and-call.js",
+    "example:audit-checklist": "node src/examples/audit-checklist-example.js",
+    "example:do-audit": "node src/examples/do-audit-example.js",
     "examples": "node src/examples/index.js"
   },
   "author": "Aniket-Engg",
