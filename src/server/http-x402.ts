@@ -733,7 +733,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
     throw new Error("SERVER_BASE_URL environment variable is required");
   }
   const resource = `${process.env.SERVER_BASE_URL}/get_audit_checklist`;
-  const amount = TOOL_CONFIG.payments.openRouter;
+  const amount = TOOL_CONFIG.payments.getAuditChecklist;
   const description = "AI-powered smart contract audit checklist matching using OpenRouter - analyzes contract code and returns relevant security checklist items as markdown";
 
   // Define schemas and examples
@@ -1395,7 +1395,7 @@ function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
       get_audit_checklist: {
         path: "/get_audit_checklist",
         method: "POST",
-        price: `${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC`,
+        price: `${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC`,
         description: "AI-powered smart contract analysis with OpenRouter",
       },
       do_audit: {
@@ -1481,7 +1481,7 @@ export function startHttpX402Server() {
     console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
     console.log(`   POST /mcp/x402-http/compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
     console.log(`   POST /mcp/x402-http/analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
-    console.log(`   POST /mcp/x402-http/get_audit_checklist - Get Audit checklist AI (${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC)`);
+    console.log(`   POST /mcp/x402-http/get_audit_checklist - Get Audit checklist AI (${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC)`);
     console.log(`   POST /mcp/x402-http/do_audit - Complete security audit report (${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC)`);
     console.log(`   GET  /mcp/x402-http/ - Service information`);
     console.log(`   GET  /mcp/x402-http/health - Health check`);

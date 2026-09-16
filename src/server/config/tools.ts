@@ -43,7 +43,7 @@ export const TOOL_CONFIG = {
   payments: {
     compileSolidity: "10000",        // 0.01 USDC
     analyzeWithSlither: "20000",     // 0.02 USDC
-    openRouter: "50000",             // 0.05 USDC
+    getAuditChecklist: "50000",      // 0.05 USDC
     doAudit: "100000",               // 0.10 USDC (full audit report)
     compileAndDeploy: {
       baseFee: "50000",              // 0.05 USDC (minimum/fallback)
