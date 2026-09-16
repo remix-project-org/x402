@@ -284,6 +284,183 @@ contract Example {
 };
 
 /**
+ * Bazaar metadata for get_audit_checklist tool
+ */
+export const GET_AUDIT_CHECKLIST_METADATA = {
+  resource: `${SERVER_BASE_URL}/get_audit_checklist`,
+  type: "http" as const,
+  description: "AI-powered smart contract audit checklist matching using OpenRouter - analyzes contract code and returns relevant security checklist items as markdown",
+  accepts: [
+    {
+      asset: "USDC",
+      amount: TOOL_CONFIG.payments.getAuditChecklist,
+      network: `eip155:${activeNetwork.chainId}`,
+      payTo: "", // Will be injected by injectPayToAddress()
+      scheme: "exact" as const,
+    },
+  ],
+  extensions: {
+    bazaar: {
+      info: {
+        input: {
+          type: "http" as const,
+          method: "POST",
+          description: "Get AI-matched security audit checklist for smart contracts. Analyzes contract code and returns relevant security categories from a comprehensive checklist.",
+          bodyType: "json" as const,
+          inputSchema: {
+            type: "object",
+            properties: {
+              sources: {
+                type: "object",
+                description: "Map of filename to source code. Required. At least one contract file must be provided.",
+                additionalProperties: {
+                  type: "object",
+                  properties: {
+                    content: {
+                      type: "string",
+                      description: "Solidity source code for this file"
+                    }
+                  },
+                  required: ["content"]
+                }
+              },
+              maxCategories: {
+                type: "number",
+                description: "Maximum number of audit categories to match (default: 12, max: 20)",
+                minimum: 1,
+                maximum: 20
+              }
+            },
+            required: ["sources"]
+          },
+          example: {
+            sources: {
+              "MyToken.sol": {
+                content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyToken {
+    string public name = "MyToken";
+    mapping(address => uint256) public balances;
+
+    function mint(address to, uint256 amount) public {
+        balances[to] += amount;
+    }
+}`
+              }
+            },
+            maxCategories: 12
+          }
+        },
+        output: {
+          type: "json" as const,
+          example: {
+            success: true,
+            markdown: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol...",
+            matchedCategories: 5,
+            model: "openrouter/auto-beta",
+            tokensUsed: 3456
+          }
+        }
+      }
+    }
+  },
+  serviceName: "Audit Checklist Generator",
+  tags: ["security", "audit", "ai", "checklist", "smart-contracts"]
+};
+
+/**
+ * Bazaar metadata for do_audit tool
+ */
+export const DO_AUDIT_METADATA = {
+  resource: `${SERVER_BASE_URL}/do_audit`,
+  type: "http" as const,
+  description: "Complete AI-powered smart contract security audit report - analyzes contract code against security checklist and provides detailed findings with severity levels",
+  accepts: [
+    {
+      asset: "USDC",
+      amount: TOOL_CONFIG.payments.doAudit,
+      network: `eip155:${activeNetwork.chainId}`,
+      payTo: "", // Will be injected by injectPayToAddress()
+      scheme: "exact" as const,
+    },
+  ],
+  extensions: {
+    bazaar: {
+      info: {
+        input: {
+          type: "http" as const,
+          method: "POST",
+          description: "Perform comprehensive security audit of smart contracts. Takes contract sources and audit checklist, returns detailed findings with severity levels, recommendations, and full markdown report.",
+          bodyType: "json" as const,
+          inputSchema: {
+            type: "object",
+            properties: {
+              sources: {
+                type: "object",
+                description: "Map of filename to source code. Required. At least one contract file must be provided.",
+                additionalProperties: {
+                  type: "object",
+                  properties: {
+                    content: {
+                      type: "string",
+                      description: "Solidity source code for this file"
+                    }
+                  },
+                  required: ["content"]
+                }
+              },
+              checklist: {
+                type: "string",
+                description: "Audit checklist in markdown format (from get_audit_checklist endpoint or custom checklist)"
+              }
+            },
+            required: ["sources", "checklist"]
+          },
+          example: {
+            sources: {
+              "MyToken.sol": {
+                content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyToken {
+    string public name = "MyToken";
+    mapping(address => uint256) public balances;
+
+    function mint(address to, uint256 amount) public {
+        balances[to] += amount;
+    }
+}`
+              }
+            },
+            checklist: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n..."
+          }
+        },
+        output: {
+          type: "json" as const,
+          example: {
+            success: true,
+            markdown: "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\n...\n\n## Findings\n\n### High Severity\n\n...",
+            findingsCount: 5,
+            severity: {
+              critical: 0,
+              high: 2,
+              medium: 2,
+              low: 1,
+              informational: 0
+            },
+            model: "openrouter/auto-beta",
+            tokensUsed: 5678
+          }
+        }
+      }
+    }
+  },
+  serviceName: "Smart Contract Auditor",
+  tags: ["security", "audit", "ai", "vulnerabilities", "report", "smart-contracts"]
+};
+
+/**
  * Bazaar metadata for compile_and_deploy tool
  */
 export const COMPILE_DEPLOY_METADATA = {
@@ -586,6 +763,8 @@ export function getAllBazaarMetadata() {
   return [
     injectPayToAddress(COMPILE_SOLIDITY_METADATA),
     injectPayToAddress(ANALYZE_SLITHER_METADATA),
+    injectPayToAddress(GET_AUDIT_CHECKLIST_METADATA),
+    injectPayToAddress(DO_AUDIT_METADATA),
     injectPayToAddress(COMPILE_DEPLOY_METADATA),
     injectPayToAddress(COMPILE_DEPLOY_MULTI_METADATA),
   ];
