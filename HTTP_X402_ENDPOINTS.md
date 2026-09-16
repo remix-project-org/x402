@@ -282,6 +282,122 @@ Run Slither security analysis with x402 payment.
 }
 ```
 
+### POST /get_audit_checklist
+
+Generate AI-powered audit checklist for smart contracts with x402 payment.
+
+**Price**: 0.05 USDC
+
+**Description**: Uses OpenRouter AI to analyze smart contracts and match them against a comprehensive security audit checklist. Returns relevant security categories in markdown format.
+
+**Request Body**:
+```json
+{
+  "sources": {
+    "MyToken.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract MyToken {\n    string public name = \"MyToken\";\n    mapping(address => uint256) public balances;\n\n    function mint(address to, uint256 amount) public {\n        balances[to] += amount;\n    }\n}"
+    }
+  },
+  "maxCategories": 12
+}
+```
+
+**Request Parameters**:
+- `sources` (required): Map of filename to source code (same format as `/compile`)
+- `maxCategories` (optional): Maximum number of audit categories to match (default: 12, max: 20)
+
+**Response (200 OK)**:
+```json
+{
+  "success": true,
+  "markdown": "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n- **Access Control** 🔴 `high`\n  - Public mint function without access control\n\n- **Integer Overflow** 🟡 `medium`\n  - Uses mapping for balances\n\n...",
+  "matchedCategories": 5,
+  "model": "openrouter/auto-beta",
+  "tokensUsed": 3456
+}
+```
+
+**Response Fields**:
+- `success`: Boolean indicating success
+- `markdown`: Complete audit checklist report in markdown format
+- `matchedCategories`: Number of categories matched to the contract
+- `model`: AI model used for analysis
+- `tokensUsed`: Number of tokens consumed by AI
+
+### POST /do_audit
+
+Perform complete AI-powered security audit with detailed findings and recommendations.
+
+**Price**: 0.10 USDC
+
+**Description**: Takes smart contract sources and an audit checklist (from `/get_audit_checklist` or custom), analyzes the code against all checklist items, and generates a comprehensive security audit report with severity-classified findings.
+
+**Request Body**:
+```json
+{
+  "sources": {
+    "MyToken.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract MyToken {\n    string public name = \"MyToken\";\n    mapping(address => uint256) public balances;\n\n    function mint(address to, uint256 amount) public {\n        balances[to] += amount;\n    }\n}"
+    }
+  },
+  "checklist": "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n- **Access Control** 🔴 `high`\n..."
+}
+```
+
+**Request Parameters**:
+- `sources` (required): Map of filename to source code
+- `checklist` (required): Audit checklist in markdown format (typically from `/get_audit_checklist`)
+
+**Response (200 OK)**:
+```json
+{
+  "success": true,
+  "markdown": "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\nThis audit identified 5 security findings across the MyToken smart contract...\n\n## Findings\n\n### 1. Unrestricted Minting Function (HIGH)\n\n**Severity**: HIGH\n**Category**: Access Control\n\n**Description**: The `mint` function is public and can be called by anyone...\n\n**Recommendation**: Add access control using OpenZeppelin's Ownable...\n\n...",
+  "findingsCount": 5,
+  "severity": {
+    "critical": 0,
+    "high": 2,
+    "medium": 2,
+    "low": 1,
+    "informational": 0
+  },
+  "model": "openrouter/auto-beta",
+  "tokensUsed": 5678
+}
+```
+
+**Response Fields**:
+- `success`: Boolean indicating success
+- `markdown`: Complete security audit report in markdown format
+- `findingsCount`: Total number of security findings
+- `severity`: Breakdown of findings by severity level
+  - `critical`: Critical severity issues
+  - `high`: High severity issues
+  - `medium`: Medium severity issues
+  - `low`: Low severity issues
+  - `informational`: Informational findings
+- `model`: AI model used for analysis
+- `tokensUsed`: Number of tokens consumed by AI
+
+**Complete Workflow Example**:
+```bash
+# Step 1: Get audit checklist (0.05 USDC)
+curl -X POST http://localhost:8002/get_audit_checklist \
+  -H "Content-Type: application/json" \
+  -H "Payment-Signature: <payment1>" \
+  -d '{"sources": {"MyToken.sol": {"content": "..."}}}' \
+  > checklist.json
+
+# Step 2: Run full audit with checklist (0.10 USDC)
+curl -X POST http://localhost:8002/do_audit \
+  -H "Content-Type: application/json" \
+  -H "Payment-Signature: <payment2>" \
+  -d "{\"sources\": {\"MyToken.sol\": {\"content\": \"...\"}}, \"checklist\": \"$(cat checklist.json | jq -r .markdown)\"}" \
+  > audit_report.json
+
+# Total cost: 0.15 USDC
+```
+
 ### GET /info
 
 Get service information (no payment required).
@@ -304,6 +420,18 @@ Get service information (no payment required).
       "method": "POST",
       "price": "0.02 USDC",
       "description": "Security analysis with Slither"
+    },
+    "get_audit_checklist": {
+      "path": "/get_audit_checklist",
+      "method": "POST",
+      "price": "0.05 USDC",
+      "description": "AI-powered smart contract analysis with OpenRouter"
+    },
+    "do_audit": {
+      "path": "/do_audit",
+      "method": "POST",
+      "price": "0.1 USDC",
+      "description": "Complete AI-powered security audit report"
     }
   },
   "network": "Base Sepolia Testnet",
@@ -405,7 +533,7 @@ The decoded JSON contains:
 | **Payment Flow** | 402 status + headers | MCP payment protocol |
 | **Discovery** | HTTP metadata in Bazaar | MCP metadata in Bazaar |
 | **Validation** | agentic.market/validate ✓ | MCP clients ✓ |
-| **Tools Available** | 2 (compile, analyze) | 4 (compile, analyze, deploy, multi-deploy) |
+| **Tools Available** | 4 (compile, analyze, audit checklist, audit report) | 4 (compile, analyze, deploy, multi-deploy) |
 | **Use Case** | Standard HTTP clients | AI agents with MCP support |
 
 ## Discovery Metadata
