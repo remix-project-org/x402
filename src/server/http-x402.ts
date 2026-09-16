@@ -507,8 +507,7 @@ contract MyToken {
     console.error("Compilation error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Compilation failed",
-      details: error.message,
+      error: "Compilation failed"
     }));
   }
 }
@@ -693,9 +692,10 @@ contract Example {
         findings: filteredFindings,
       };
     } else if (slitherResult && !slitherResult.success) {
+      console.error("Slither analysis failed:", slitherResult.error || slitherResult.message);
       analysisResult = {
         success: false,
-        error: slitherResult.error || slitherResult.message || "Slither analysis failed",
+        error: "Slither analysis failed",
       };
     } else {
       analysisResult = {
@@ -719,8 +719,7 @@ contract Example {
     console.error("Analysis error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Analysis failed",
-      details: error.message,
+      error: "Analysis failed"
     }));
   }
 }
@@ -734,7 +733,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
     throw new Error("SERVER_BASE_URL environment variable is required");
   }
   const resource = `${process.env.SERVER_BASE_URL}/get_audit_checklist`;
-  const amount = TOOL_CONFIG.payments.openRouter;
+  const amount = TOOL_CONFIG.payments.getAuditChecklist;
   const description = "AI-powered smart contract audit checklist matching using OpenRouter - analyzes contract code and returns relevant security checklist items as markdown";
 
   // Define schemas and examples
@@ -947,8 +946,7 @@ Return a JSON object with this structure:
       console.error("Failed to parse AI response:", parseError);
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
-        error: "Failed to parse AI response",
-        details: String(parseError)
+        error: "Failed to parse AI response"
       }));
       return;
     }
@@ -981,8 +979,390 @@ Return a JSON object with this structure:
     console.error("Audit checklist error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Audit checklist request failed",
-      details: error.message,
+      error: "Audit checklist request failed"
+    }));
+  }
+}
+
+/**
+ * Handle /do_audit endpoint - Complete audit report generation
+ */
+async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse) {
+  // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
+  if (!process.env.SERVER_BASE_URL) {
+    throw new Error("SERVER_BASE_URL environment variable is required");
+  }
+  const resource = `${process.env.SERVER_BASE_URL}/do_audit`;
+  const amount = TOOL_CONFIG.payments.doAudit;
+  const description = "Complete AI-powered smart contract security audit report - analyzes contract code against security checklist and provides detailed findings";
+
+  // Define schemas and examples
+  const inputSchema = {
+    type: "object",
+    properties: {
+      sources: {
+        type: "object",
+        description: "Map of filename to source code. Required. At least one contract file must be provided.",
+        additionalProperties: {
+          type: "object",
+          properties: {
+            content: { type: "string" }
+          },
+          required: ["content"]
+        }
+      },
+      checklist: {
+        type: "string",
+        description: "Audit checklist in markdown format (from get_audit_checklist endpoint or custom checklist)"
+      }
+    },
+    required: ["sources", "checklist"]
+  };
+
+  const inputExample = {
+    sources: {
+      "MyToken.sol": {
+        content: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MyToken {
+    string public name = "MyToken";
+    mapping(address => uint256) public balances;
+
+    function mint(address to, uint256 amount) public {
+        balances[to] += amount;
+    }
+}`
+      }
+    },
+    checklist: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n..."
+  };
+
+  const outputExample = {
+    success: true,
+    markdown: "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\n...\n\n## Findings\n\n### High Severity\n\n...",
+    findingsCount: 5,
+    severity: {
+      critical: 0,
+      high: 2,
+      medium: 2,
+      low: 1,
+      informational: 0
+    },
+    model: "openrouter/auto-beta",
+    tokensUsed: 5678
+  };
+
+  // Create v2Response and requirements with extensions
+  const endpointTags = ["security", "audit", "solidity", "smart-contract", "report"];
+  const v2Response = createPaymentRequiredResponse(
+    resource,
+    description,
+    amount,
+    inputSchema,
+    inputExample,
+    outputExample,
+    endpointTags
+  );
+
+  const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
+
+  // Check for payment signature
+  const paymentSignature = req.headers["payment-signature"] as string;
+
+  if (!paymentSignature) {
+    // No payment - return 402 with v2 payment requirements
+    res.writeHead(402, {
+      "Content-Type": "application/json",
+      "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
+    });
+    res.end(JSON.stringify(v2Response, null, 2));
+    return;
+  }
+
+  // Verify payment
+  try {
+    const payment = decodePaymentSignature(paymentSignature);
+    const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
+
+    if (!isValid) {
+      res.writeHead(402, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid or unconfirmed payment" }));
+      return;
+    }
+
+    // Payment verified - process audit request
+    const body = await parseBody(req);
+    const { sources, checklist } = body;
+
+    if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing required field: sources. At least one contract file is required." }));
+      return;
+    }
+
+    if (!checklist || typeof checklist !== 'string') {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing required field: checklist. Provide audit checklist in markdown format." }));
+      return;
+    }
+
+    // Check for OpenRouter API key
+    if (!process.env.OPENROUTER_API_KEY) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "OpenRouter API key not configured",
+        details: "OPENROUTER_API_KEY environment variable is required"
+      }));
+      return;
+    }
+
+    console.log(`🔍 Processing complete audit request...`);
+    console.log(`   Contract files: ${Object.keys(sources).join(', ')}`);
+    console.log(`   Checklist length: ${checklist.length} characters`);
+
+    // Build contract sources section
+    let contractsSection = '';
+    for (const [filename, fileData] of Object.entries(sources)) {
+      if (fileData && typeof fileData === 'object' && 'content' in fileData) {
+        const content = (fileData as any).content;
+        contractsSection += `\n## Contract: ${filename}\n\`\`\`solidity\n${content}\n\`\`\`\n`;
+      }
+    }
+
+    // Build the AI prompt
+    const systemMessage = `You are an expert smart contract security auditor. Your task is to analyze Solidity smart contracts and identify security vulnerabilities, bugs, and code quality issues.
+
+You will be given:
+1. A security audit checklist (markdown format) with categories and items to check
+2. The complete source code of one or more smart contracts
+
+Your job is to:
+1. Carefully analyze each contract against the provided checklist
+2. Identify specific security issues, vulnerabilities, and concerns
+3. Classify each finding by severity: CRITICAL, HIGH, MEDIUM, LOW, or INFORMATIONAL
+4. Provide detailed explanations and remediation steps
+5. Generate a comprehensive audit report in markdown format
+
+Guidelines:
+- Be thorough and specific in your analysis
+- Reference exact line numbers and code snippets when identifying issues
+- Provide clear, actionable remediation steps
+- Focus on real security concerns, not minor style issues
+- If a checklist item is not applicable, skip it
+- Prioritize findings from most to least severe
+
+Return a JSON object with this structure:
+{
+  "findings": [
+    {
+      "title": "Brief title of the issue",
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL",
+      "description": "Detailed explanation of the issue",
+      "location": "ContractName.sol:LineNumber or function name",
+      "code": "Optional code snippet showing the issue",
+      "impact": "What could happen if exploited",
+      "remediation": "How to fix the issue"
+    }
+  ],
+  "summary": "Brief executive summary of the audit",
+  "recommendations": ["General recommendation 1", "General recommendation 2"]
+}`;
+
+    const userMessage = `# Audit Checklist
+
+${checklist}
+
+# Smart Contracts to Audit
+
+${contractsSection}
+
+Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
+
+    // Initialize OpenRouter SDK
+    const openrouter = new OpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY
+    });
+
+    console.log(`🤖 Sending audit request to OpenRouter...`);
+
+    // Call OpenRouter API
+    const result = await openrouter.chat.send({
+      chatRequest: {
+        model: TOOL_CONFIG.openRouter.model,
+        messages: [
+          {
+            role: "system",
+            content: systemMessage
+          },
+          {
+            role: "user",
+            content: userMessage
+          }
+        ],
+        maxTokens: 32768,
+        temperature: 0.7,
+        stream: false,
+        responseFormat: {
+          type: "json_object"
+        }
+      }
+    });
+
+    // Extract response from OpenRouter SDK result
+    const responseData = result as any;
+    const aiResponse = responseData.choices?.[0]?.message?.content || "{}";
+    const tokensUsed = responseData.usage?.total_tokens || 0;
+
+    console.log(`✅ Received audit response from OpenRouter (${tokensUsed} tokens)`);
+
+    // Parse AI response
+    let auditData: any;
+    try {
+      auditData = JSON.parse(aiResponse);
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", parseError);
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Failed to parse AI response"
+      }));
+      return;
+    }
+
+    const findings = auditData.findings || [];
+    const summary = auditData.summary || "No summary provided";
+    const recommendations = auditData.recommendations || [];
+
+    console.log(`   Found ${findings.length} issues`);
+
+    // Count findings by severity
+    const severityCounts = {
+      critical: findings.filter((f: any) => f.severity === 'CRITICAL').length,
+      high: findings.filter((f: any) => f.severity === 'HIGH').length,
+      medium: findings.filter((f: any) => f.severity === 'MEDIUM').length,
+      low: findings.filter((f: any) => f.severity === 'LOW').length,
+      informational: findings.filter((f: any) => f.severity === 'INFORMATIONAL').length
+    };
+
+    // Generate markdown audit report
+    const reportLines: string[] = [];
+    reportLines.push('# Complete Security Audit Report');
+    reportLines.push('');
+    reportLines.push(`**Contracts Audited**: ${Object.keys(sources).join(', ')}`);
+    reportLines.push(`**Date**: ${new Date().toISOString()}`);
+    reportLines.push(`**Total Findings**: ${findings.length}`);
+    reportLines.push('');
+    reportLines.push('## Severity Breakdown');
+    reportLines.push('');
+    reportLines.push(`- 🔴 **Critical**: ${severityCounts.critical}`);
+    reportLines.push(`- 🟠 **High**: ${severityCounts.high}`);
+    reportLines.push(`- 🟡 **Medium**: ${severityCounts.medium}`);
+    reportLines.push(`- 🟢 **Low**: ${severityCounts.low}`);
+    reportLines.push(`- ℹ️ **Informational**: ${severityCounts.informational}`);
+    reportLines.push('');
+    reportLines.push('---');
+    reportLines.push('');
+    reportLines.push('## Executive Summary');
+    reportLines.push('');
+    reportLines.push(summary);
+    reportLines.push('');
+    reportLines.push('---');
+    reportLines.push('');
+
+    // Add findings by severity
+    const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
+    const severityEmoji: Record<string, string> = {
+      'CRITICAL': '🔴',
+      'HIGH': '🟠',
+      'MEDIUM': '🟡',
+      'LOW': '🟢',
+      'INFORMATIONAL': 'ℹ️'
+    };
+
+    for (const severity of severityOrder) {
+      const severityFindings = findings.filter((f: any) => f.severity === severity);
+
+      if (severityFindings.length > 0) {
+        reportLines.push(`## ${severityEmoji[severity]} ${severity} Severity Findings`);
+        reportLines.push('');
+
+        for (let i = 0; i < severityFindings.length; i++) {
+          const finding = severityFindings[i];
+          reportLines.push(`### ${i + 1}. ${finding.title}`);
+          reportLines.push('');
+          reportLines.push(`**Severity**: ${severity}`);
+          if (finding.location) {
+            reportLines.push(`**Location**: ${finding.location}`);
+          }
+          reportLines.push('');
+          reportLines.push('**Description**:');
+          reportLines.push(finding.description);
+          reportLines.push('');
+
+          if (finding.code) {
+            reportLines.push('**Code**:');
+            reportLines.push('```solidity');
+            reportLines.push(finding.code);
+            reportLines.push('```');
+            reportLines.push('');
+          }
+
+          if (finding.impact) {
+            reportLines.push('**Impact**:');
+            reportLines.push(finding.impact);
+            reportLines.push('');
+          }
+
+          reportLines.push('**Remediation**:');
+          reportLines.push(finding.remediation);
+          reportLines.push('');
+          reportLines.push('---');
+          reportLines.push('');
+        }
+      }
+    }
+
+    // Add recommendations section
+    if (recommendations.length > 0) {
+      reportLines.push('## General Recommendations');
+      reportLines.push('');
+      for (const rec of recommendations) {
+        reportLines.push(`- ${rec}`);
+      }
+      reportLines.push('');
+    }
+
+    reportLines.push('---');
+    reportLines.push('');
+    reportLines.push('*Audit report generated by x402 Audit Service powered by OpenRouter*');
+
+    const markdownReport = reportLines.join('\n');
+
+    const paymentResponseHeader = Buffer.from(JSON.stringify({
+      status: "settled",
+      network: requirementsWithExtensions.accepts[0]!.network,
+      amount: requirementsWithExtensions.accepts[0]!.amount,
+    })).toString("base64");
+
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": paymentResponseHeader,
+    });
+
+    res.end(JSON.stringify({
+      success: true,
+      markdown: markdownReport,
+      findingsCount: findings.length,
+      severity: severityCounts,
+      model: TOOL_CONFIG.openRouter.model,
+      tokensUsed: tokensUsed
+    }));
+
+  } catch (error: any) {
+    console.error("Audit error:", error);
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Audit request failed"
     }));
   }
 }
@@ -1015,8 +1395,14 @@ function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
       get_audit_checklist: {
         path: "/get_audit_checklist",
         method: "POST",
-        price: `${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC`,
+        price: `${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC`,
         description: "AI-powered smart contract analysis with OpenRouter",
+      },
+      do_audit: {
+        path: "/do_audit",
+        method: "POST",
+        price: `${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC`,
+        description: "Complete AI-powered security audit report",
       },
     },
     network: network.displayName,
@@ -1061,6 +1447,8 @@ export function startHttpX402Server() {
         await handleAnalyze(req, res);
       } else if ((url.pathname === "/get_audit_checklist" || url.pathname === "/mcp/x402-http/get_audit_checklist") && req.method === "POST") {
         await handleGetAuditChecklist(req, res);
+      } else if ((url.pathname === "/do_audit" || url.pathname === "/mcp/x402-http/do_audit") && req.method === "POST") {
+        await handleDoAudit(req, res);
       } else if (url.pathname === "/" || url.pathname === "/info" || url.pathname === "/mcp/x402-http" || url.pathname === "/mcp/x402-http/") {
         handleInfo(req, res);
       } else if (url.pathname === "/health" || url.pathname === "/mcp/x402-http/health") {
@@ -1070,7 +1458,7 @@ export function startHttpX402Server() {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           error: "Not found",
-          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/get_audit_checklist", "/mcp/x402-http/health"],
+          availableEndpoints: ["/mcp/x402-http/compile", "/mcp/x402-http/analyze", "/mcp/x402-http/get_audit_checklist", "/mcp/x402-http/do_audit", "/mcp/x402-http/health"],
         }));
       }
     } catch (error: any) {
@@ -1093,10 +1481,11 @@ export function startHttpX402Server() {
     console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
     console.log(`   POST /mcp/x402-http/compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
     console.log(`   POST /mcp/x402-http/analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
-    console.log(`   POST /mcp/x402-http/get_audit_checklist - Get Audit checklist AI (${parseFloat(TOOL_CONFIG.payments.openRouter) / 1_000_000} USDC)`);
+    console.log(`   POST /mcp/x402-http/get_audit_checklist - Get Audit checklist AI (${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC)`);
+    console.log(`   POST /mcp/x402-http/do_audit - Complete security audit report (${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC)`);
     console.log(`   GET  /mcp/x402-http/ - Service information`);
     console.log(`   GET  /mcp/x402-http/health - Health check`);
-    console.log(`\n   Also supports root paths: /compile, /analyze, /get_audit_checklist, /health`);
+    console.log(`\n   Also supports root paths: /compile, /analyze, /get_audit_checklist, /do_audit, /health`);
     console.log(`\n🌐 Public Base URL: ${process.env.SERVER_BASE_URL}`);
     console.log(`📡 These endpoints are x402-compatible and can be validated on agentic.market`);
   });

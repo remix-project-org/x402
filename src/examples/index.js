@@ -42,6 +42,20 @@ const examples = {
     description: "Compile and deploy contracts using Delegated Deployment Service",
     cost: "0.05 USDC",
     script: "example:deploy"
+  },
+  "audit-checklist": {
+    name: "Get Audit Checklist",
+    file: "audit-checklist-example.js",
+    description: "Get AI-matched security checklist for your contract",
+    cost: "0.05 USDC",
+    script: "example:audit-checklist"
+  },
+  "do-audit": {
+    name: "Complete Security Audit",
+    file: "do-audit-example.js",
+    description: "Full audit workflow: checklist + detailed security analysis",
+    cost: "0.15 USDC (2 steps)",
+    script: "example:do-audit"
   }
 };
 

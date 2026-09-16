@@ -6,7 +6,7 @@ A complete x402 payment protocol server providing paid Solidity development tool
 
 This is a **multi-protocol server implementation** that provides paid Solidity development tools through:
 - **MCP Server** (`/mcp`) - Model Context Protocol for AI agents like Claude
-- **HTTP x402 Server** (`/compile`, `/analyze`) - Standard HTTP REST endpoints with x402 payment protocol
+- **HTTP x402 Server** (`/compile`, `/analyze`, `/get_audit_checklist`, `/do_audit`) - Standard HTTP REST endpoints with x402 payment protocol
 - **Discovery Server** (`/discovery`) - Service metadata for Bazaar indexing and AI agent discovery
 
 **Key Capabilities:**
@@ -64,10 +64,18 @@ This is a **multi-protocol server implementation** that provides paid Solidity d
 ## Features
 
 ### Available Tools
+
+**Available via Both HTTP x402 & MCP:**
 1. **compile_solidity** - Solidity compilation (0.01 USDC)
-2. **analyze_with_slither** - Security analysis (0.02 USDC)
-3. **compile_and_deploy** - Single network deployment (dynamic pricing)
-4. **compile_and_deploy_multi_network** - Multi-network deployment (dynamic pricing)
+2. **analyze_with_slither** - Security analysis with Slither (0.02 USDC)
+
+**HTTP x402 Only:**
+3. **get_audit_checklist** - AI-powered audit checklist generation (0.05 USDC)
+4. **do_audit** - Complete security audit report with AI (0.10 USDC)
+
+**MCP Only:**
+5. **compile_and_deploy** - Single network deployment (dynamic pricing)
+6. **compile_and_deploy_multi_network** - Multi-network deployment (dynamic pricing)
 
 ### Technical Features
 - **x402 Payment Protocol**: On-chain settlement verification before service execution
