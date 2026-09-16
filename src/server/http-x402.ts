@@ -507,8 +507,7 @@ contract MyToken {
     console.error("Compilation error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Compilation failed",
-      details: error.message,
+      error: "Compilation failed"
     }));
   }
 }
@@ -693,9 +692,10 @@ contract Example {
         findings: filteredFindings,
       };
     } else if (slitherResult && !slitherResult.success) {
+      console.error("Slither analysis failed:", slitherResult.error || slitherResult.message);
       analysisResult = {
         success: false,
-        error: slitherResult.error || slitherResult.message || "Slither analysis failed",
+        error: "Slither analysis failed",
       };
     } else {
       analysisResult = {
@@ -719,8 +719,7 @@ contract Example {
     console.error("Analysis error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Analysis failed",
-      details: error.message,
+      error: "Analysis failed"
     }));
   }
 }
@@ -947,8 +946,7 @@ Return a JSON object with this structure:
       console.error("Failed to parse AI response:", parseError);
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
-        error: "Failed to parse AI response",
-        details: String(parseError)
+        error: "Failed to parse AI response"
       }));
       return;
     }
@@ -981,8 +979,7 @@ Return a JSON object with this structure:
     console.error("Audit checklist error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Audit checklist request failed",
-      details: error.message,
+      error: "Audit checklist request failed"
     }));
   }
 }
@@ -1227,8 +1224,7 @@ Please perform a complete security audit of the above contracts against the prov
       console.error("Failed to parse AI response:", parseError);
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
-        error: "Failed to parse AI response",
-        details: String(parseError)
+        error: "Failed to parse AI response"
       }));
       return;
     }
@@ -1366,8 +1362,7 @@ Please perform a complete security audit of the above contracts against the prov
     console.error("Audit error:", error);
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
-      error: "Audit request failed",
-      details: error.message,
+      error: "Audit request failed"
     }));
   }
 }
