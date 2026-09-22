@@ -52,7 +52,14 @@ export function createPaymentRequirements(
 }
 
 /**
- * Verify payment has been settled on-chain
+ * Sleep helper for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Verify payment has been settled on-chain with retry logic
  */
 export async function verifyPayment(payment: any, requirements: any): Promise<void> {
   console.log(`💰 Received payment authorization`);
@@ -63,24 +70,55 @@ export async function verifyPayment(payment: any, requirements: any): Promise<vo
 
   console.log(`\n⛓️  Verifying payment settlement on-chain...`);
 
-  try {
-    const client = createConnectedClient(requirements.network);
-    console.log("   Payment object received:", JSON.stringify(payment, null, 2));
+  const MAX_RETRIES = 2;
+  const INITIAL_DELAY_MS = 2000; // Start with 2 seconds
+  let lastError: any = null;
 
-    const verifyResponse = await verify(client, payment, requirements);
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const client = createConnectedClient(requirements.network);
 
-    if (verifyResponse.isValid) {
-      console.log(`✅ Payment verified as settled on-chain!`);
-      console.log(`   Client settled and paid gas fees`);
-      console.log(`   Server received USDC payment`);
-    } else {
-      console.log(`❌ Payment verification failed: ${verifyResponse.invalidReason}`);
-      throw new Error(`Payment not settled on-chain: ${verifyResponse.invalidReason}`);
+      if (attempt > 1) {
+        console.log(`   Retry attempt ${attempt}/${MAX_RETRIES}...`);
+      } else {
+        console.log("   Payment object received:", JSON.stringify(payment, null, 2));
+      }
+
+      const verifyResponse = await verify(client, payment, requirements);
+
+      if (verifyResponse.isValid) {
+        console.log(`✅ Payment verified as settled on-chain!`);
+        if (attempt > 1) {
+          console.log(`   Verified on attempt ${attempt}/${MAX_RETRIES}`);
+        }
+        console.log(`   Client settled and paid gas fees`);
+        console.log(`   Server received USDC payment`);
+        return; // Success!
+      } else {
+        lastError = new Error(`Payment not settled on-chain: ${verifyResponse.invalidReason}`);
+        console.log(`   ⚠️  Verification attempt ${attempt} failed: ${verifyResponse.invalidReason}`);
+
+        if (attempt < MAX_RETRIES) {
+          const delayMs = INITIAL_DELAY_MS * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s
+          console.log(`   Waiting ${delayMs}ms before retry...`);
+          await sleep(delayMs);
+        }
+      }
+    } catch (error: any) {
+      lastError = error;
+      console.error(`   ⚠️  Verification attempt ${attempt} error: ${error.message}`);
+
+      if (attempt < MAX_RETRIES) {
+        const delayMs = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+        console.log(`   Waiting ${delayMs}ms before retry...`);
+        await sleep(delayMs);
+      }
     }
-  } catch (error: any) {
-    console.error(`❌ Error during payment verification:`, error.message);
-    throw new Error(`Payment verification failed: ${error.message}`);
   }
+
+  // All retries exhausted
+  console.error(`❌ Payment verification failed after ${MAX_RETRIES} attempts`);
+  throw new Error(`Payment verification failed after ${MAX_RETRIES} retries: ${lastError?.message || 'Unknown error'}`);
 }
 
 /**
