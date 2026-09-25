@@ -12,6 +12,8 @@ This comprehensive guide shows how to use the **@coinbase/payments-mcp** server 
 - [Using Remix.live Services](#using-remixlive-services)
   - [Compile Solidity Contracts](#compile-solidity-contracts)
   - [Analyze Contracts with Slither](#analyze-contracts-with-slither)
+  - [Get Audit Checklist](#get-audit-checklist)
+  - [Perform Complete Security Audit](#perform-complete-security-audit)
 - [Available MCP Tools](#available-mcp-tools)
 - [Wallet Management](#wallet-management)
 - [Troubleshooting](#troubleshooting)
@@ -297,6 +299,122 @@ Claude will:
 3. Return Slither's security analysis
 4. Explain the vulnerabilities found (like the reentrancy issue)
 
+### Get Audit Checklist
+
+**Cost**: $0.05 USDC per checklist
+
+Get a customized security audit checklist tailored to your contract's structure and patterns.
+
+#### Example: Generate Custom Audit Checklist
+
+```
+get me an audit checklist for this token contract using remix.live:
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract ExampleToken is ERC20, Ownable {
+    uint256 public maxSupply = 1000000 * 10**18;
+
+    constructor() ERC20("Example Token", "EXMP") Ownable(msg.sender) {
+        _mint(msg.sender, 100000 * 10**18);
+    }
+
+    function mint(address to, uint256 amount) external onlyOwner {
+        require(totalSupply() + amount <= maxSupply, "Exceeds max supply");
+        _mint(to, amount);
+    }
+}
+```
+
+Claude will:
+1. Analyze your contract structure
+2. Generate relevant security checklist items
+3. Pay $0.05 USDC automatically
+4. Return a customized checklist in markdown format
+
+**Response includes:**
+- Relevant security categories based on contract patterns
+- Specific checklist items to review
+- Industry best practices for similar contracts
+- Number of matched categories and tokens used
+
+### Perform Complete Security Audit
+
+**Cost**: $0.10 USDC per audit
+
+Get a comprehensive AI-powered security audit with detailed findings, severity levels, and remediation recommendations.
+
+#### Example 1: Full Security Audit
+
+```
+perform a complete security audit on this contract using remix.live:
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract ExampleToken is ERC20, Ownable {
+    uint256 public maxSupply = 1000000 * 10**18;
+    mapping(address => bool) public blacklisted;
+
+    constructor() ERC20("Example Token", "EXMP") Ownable(msg.sender) {
+        _mint(msg.sender, 100000 * 10**18);
+    }
+
+    function mint(address to, uint256 amount) external onlyOwner {
+        require(totalSupply() + amount <= maxSupply, "Exceeds max supply");
+        require(!blacklisted[to], "Address is blacklisted");
+        _mint(to, amount);
+    }
+
+    function blacklist(address account) external onlyOwner {
+        blacklisted[account] = true;
+    }
+
+    function _update(address from, address to, uint256 value) internal virtual override {
+        require(!blacklisted[from] && !blacklisted[to], "Blacklisted address");
+        super._update(from, to, value);
+    }
+}
+```
+
+Claude will:
+1. Generate a customized audit checklist (or use one you provide)
+2. Perform deep AI-powered security analysis
+3. Pay $0.10 USDC automatically
+4. Return a comprehensive audit report with findings
+
+**Response includes:**
+- Total number of findings
+- Severity breakdown (Critical, High, Medium, Low, Informational)
+- Detailed markdown report with:
+  - Each vulnerability identified
+  - Code snippets and line numbers
+  - Impact and risk assessment
+  - Recommended remediations
+- Model used and tokens consumed
+
+#### Example 2: Audit Workflow (Checklist + Audit)
+
+You can combine both endpoints for a complete workflow:
+
+```
+1. First get me an audit checklist for this contract
+2. Then perform a full audit using that checklist
+[paste your contract code]
+```
+
+This two-step approach:
+- First generates a tailored checklist ($0.05 USDC)
+- Then runs comprehensive audit with that checklist ($0.10 USDC)
+- Total cost: $0.15 USDC
+
 
 ## Wallet Management
 
@@ -374,12 +492,27 @@ create a simple voting contract and:
 4. suggest improvements
 ```
 
+### Workflow 4: Complete Security Audit
+
+```
+I need a comprehensive security audit for this token contract:
+[paste your contract]
+
+Please:
+1. Get a customized audit checklist using remix.live
+2. Perform a complete security audit with the checklist
+3. Summarize all findings by severity
+4. Provide specific remediation recommendations
+```
+
 ## Cost Summary
 
 | Service | Endpoint | Cost | Description |
 |---------|----------|------|-------------|
 | Compile | api.remix.live/mcp/x402-http/compile | $0.01 USDC | Solidity compilation |
 | Analyze | api.remix.live/mcp/x402-http/analyze | $0.02 USDC | Slither security analysis |
+| Get Audit Checklist | api.remix.live/mcp/x402-http/get_audit_checklist | $0.05 USDC | Customized security checklist |
+| Do Audit | api.remix.live/mcp/x402-http/do_audit | $0.10 USDC | Comprehensive AI security audit |
 
 **Note**: No gas fees! Payments use the facilitator model where gas is covered by the service.
 

@@ -32,7 +32,7 @@ npx awal x402 bazaar search "remix.live"
 
 **Output:**
 ```
-Found 2 results
+Found 4 results
 
 https://api.remix.live/mcp/x402-http/compile
 Compile Solidity contracts with the Remix compiler, supporting multiple files, custom versions, and optimization settings
@@ -43,6 +43,18 @@ Scheme: exact
 https://api.remix.live/mcp/x402-http/analyze
 Security analysis powered by Slither to detect vulnerabilities, reentrancy issues, and smart contract code quality problems
 Price: 0.02 USDC
+Network: eip155:8453
+Scheme: exact
+---
+https://api.remix.live/mcp/x402-http/get_audit_checklist
+Get a customized security audit checklist based on contract structure and patterns
+Price: 0.05 USDC
+Network: eip155:8453
+Scheme: exact
+---
+https://api.remix.live/mcp/x402-http/do_audit
+Perform a comprehensive AI-powered security audit with detailed findings and severity levels
+Price: 0.10 USDC
 Network: eip155:8453
 Scheme: exact
 ---
@@ -57,6 +69,16 @@ Compile Solidity smart contracts
 Run Slither security analysis on smart contracts
 - **Price**: 0.02 USDC
 - **Endpoint**: `https://api.remix.live/mcp/x402-http/analyze`
+
+### POST /get_audit_checklist
+Get a customized security audit checklist based on contract structure and patterns
+- **Price**: 0.05 USDC
+- **Endpoint**: `https://api.remix.live/mcp/x402-http/get_audit_checklist`
+
+### POST /do_audit
+Perform a comprehensive AI-powered security audit with detailed findings and severity levels
+- **Price**: 0.10 USDC
+- **Endpoint**: `https://api.remix.live/mcp/x402-http/do_audit`
 
 ## Quick Start
 
@@ -112,6 +134,36 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/analyze" \
   }'
 ```
 
+#### Get Audit Checklist
+
+```bash
+npx awal x402 pay "https://api.remix.live/mcp/x402-http/get_audit_checklist" \
+  --method POST \
+  --data '{
+    "sources": {
+      "ExampleToken.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"@openzeppelin/contracts/token/ERC20/ERC20.sol\";\nimport \"@openzeppelin/contracts/access/Ownable.sol\";\n\ncontract ExampleToken is ERC20, Ownable {\n    uint256 public maxSupply = 1000000 * 10**18;\n    \n    constructor() ERC20(\"Example Token\", \"EXMP\") Ownable(msg.sender) {\n        _mint(msg.sender, 100000 * 10**18);\n    }\n    \n    function mint(address to, uint256 amount) external onlyOwner {\n        require(totalSupply() + amount <= maxSupply, \"Exceeds max supply\");\n        _mint(to, amount);\n    }\n}"
+      }
+    },
+    "maxCategories": 12
+  }'
+```
+
+#### Perform Complete Audit
+
+```bash
+npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
+  --method POST \
+  --data '{
+    "sources": {
+      "ExampleToken.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"@openzeppelin/contracts/token/ERC20/ERC20.sol\";\nimport \"@openzeppelin/contracts/access/Ownable.sol\";\n\ncontract ExampleToken is ERC20, Ownable {\n    uint256 public maxSupply = 1000000 * 10**18;\n    mapping(address => bool) public blacklisted;\n    \n    constructor() ERC20(\"Example Token\", \"EXMP\") Ownable(msg.sender) {\n        _mint(msg.sender, 100000 * 10**18);\n    }\n    \n    function mint(address to, uint256 amount) external onlyOwner {\n        require(totalSupply() + amount <= maxSupply, \"Exceeds max supply\");\n        require(!blacklisted[to], \"Address is blacklisted\");\n        _mint(to, amount);\n    }\n    \n    function blacklist(address account) external onlyOwner {\n        blacklisted[account] = true;\n    }\n    \n    function _update(address from, address to, uint256 value) internal virtual override {\n        require(!blacklisted[from] && !blacklisted[to], \"Blacklisted address\");\n        super._update(from, to, value);\n    }\n}"
+      }
+    },
+    "checklist": "## Access Control\\n- [ ] Owner privileges are properly restricted\\n- [ ] Role-based access control is implemented correctly\\n\\n## Token Economics\\n- [ ] Max supply cap is enforced\\n- [ ] Minting logic is secure\\n\\n## Blacklist Mechanism\\n- [ ] Blacklist cannot be bypassed\\n- [ ] Events are emitted for transparency"
+  }'
+```
+
 ## Key Information
 
 ### Pricing
@@ -119,6 +171,8 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/analyze" \
 |---------|------|----------|
 | Compile | 0.01 USDC | $0 (facilitator pays) |
 | Analyze | 0.02 USDC | $0 (facilitator pays) |
+| Get Audit Checklist | 0.05 USDC | $0 (facilitator pays) |
+| Do Audit | 0.10 USDC | $0 (facilitator pays) |
 
 ### Networks
 - **Base Mainnet**: Chain ID `eip155:8453`
