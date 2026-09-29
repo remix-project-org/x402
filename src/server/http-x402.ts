@@ -17,7 +17,6 @@ import { TOOL_CONFIG } from "./config/tools.js";
 import { SERVICE_METADATA, COMPILE_SOLIDITY_METADATA, ANALYZE_SLITHER_METADATA } from "./config/bazaar.js";
 import { Compiler } from "@remix-project/remix-solidity";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
-import { OpenRouter } from "@openrouter/sdk";
 import {
   loadAuditChecklist,
   flattenCategoriesForPrompt,
@@ -26,6 +25,10 @@ import {
   formatAuditReportMarkdown,
   type AuditMatch
 } from "./utils/audit-checklist.js";
+import {
+  testOpenRouterAvailability,
+  callOpenRouterJSON
+} from "./utils/openrouter.js";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
@@ -815,6 +818,33 @@ contract MyToken {
     return;
   }
 
+  // CRITICAL: Test OpenRouter availability BEFORE verifying payment
+  // This ensures we don't settle payment if the service is unavailable
+  try {
+    console.log(`🔍 Pre-payment validation: Testing OpenRouter availability...`);
+    const isOpenRouterAvailable = await testOpenRouterAvailability();
+
+    if (!isOpenRouterAvailable) {
+      console.error(`❌ OpenRouter is not available - refusing to process payment`);
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Service temporarily unavailable",
+        details: "OpenRouter API is not responding. Please try again later."
+      }));
+      return;
+    }
+
+    console.log(`✅ OpenRouter availability confirmed`);
+  } catch (availError: any) {
+    console.error(`❌ OpenRouter availability check failed:`, availError);
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Service temporarily unavailable",
+      details: "Unable to verify service availability. Please try again later."
+    }));
+    return;
+  }
+
   // Verify payment
   try {
     const payment = decodePaymentSignature(paymentSignature);
@@ -896,60 +926,34 @@ Return a JSON object with this structure:
   "skipped_reason": "optional explanation if no matches"
 }`;
 
-    // Initialize OpenRouter SDK
-    const openrouter = new OpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY
+    console.log(`🤖 Sending audit matching request to OpenRouter with fallback support...`);
+
+    // Call OpenRouter API with fallback and retry logic
+    const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
+      systemMessage,
+      userMessage,
+      maxTokens: 32768,
+      temperature: 0.7,
+      models: TOOL_CONFIG.openRouter.fallbackModels,
+      skipValidation: true, // We already validated availability above
     });
 
-    console.log(`🤖 Sending audit matching request to OpenRouter...`);
-
-    // Call OpenRouter API with structured prompt
-    const result = await openrouter.chat.send({
-      chatRequest: {
-        model: TOOL_CONFIG.openRouter.model,
-        messages: [
-          {
-            role: "system",
-            content: systemMessage
-          },
-          {
-            role: "user",
-            content: userMessage
-          }
-        ],
-        maxTokens: 32768,
-        temperature: 0.7,
-        stream: false,
-        responseFormat: {
-          type: "json_object"
-        }
-      }
-    });
-
-    // Extract response from OpenRouter SDK result
-    const responseData = result as any;
-    const aiResponse = responseData.choices?.[0]?.message?.content || "{}";
-    const tokensUsed = responseData.usage?.total_tokens || 0;
-
-    console.log(`✅ Received response from OpenRouter (${tokensUsed} tokens)`);
-
-    // Parse AI response
-    let matches: AuditMatch[] = [];
-    let skippedReason: string | undefined;
-
-    try {
-      const parsed = JSON.parse(aiResponse);
-      matches = parsed.matches || [];
-      skippedReason = parsed.skipped_reason;
-      console.log(`   Matched ${matches.length} categories`);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
+    if (!openRouterResult.success || !openRouterResult.parsed) {
+      console.error(`❌ OpenRouter request failed:`, openRouterResult.error);
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
-        error: "Failed to parse AI response"
+        error: "AI service request failed",
+        details: openRouterResult.error || "Unknown error",
+        attemptedModels: openRouterResult.attemptedModels
       }));
       return;
     }
+
+    const { parsed, model, tokensUsed } = openRouterResult;
+    const matches = parsed.matches || [];
+    const skippedReason = parsed.skipped_reason;
+
+    console.log(`✅ Success with ${model} (${tokensUsed} tokens, ${matches.length} matches)`)
 
     // Generate markdown report
     const contractName = contractSkeletons.map(c => c.filename).join(', ');
@@ -971,7 +975,7 @@ Return a JSON object with this structure:
       markdown: markdownReport,
       matchedCategories: matches.length,
       skippedReason: skippedReason,
-      model: TOOL_CONFIG.openRouter.model,
+      model: model,
       tokensUsed: tokensUsed
     }));
 
@@ -1080,6 +1084,33 @@ contract MyToken {
     return;
   }
 
+  // CRITICAL: Test OpenRouter availability BEFORE verifying payment
+  // This ensures we don't settle payment if the service is unavailable
+  try {
+    console.log(`🔍 Pre-payment validation: Testing OpenRouter availability...`);
+    const isOpenRouterAvailable = await testOpenRouterAvailability();
+
+    if (!isOpenRouterAvailable) {
+      console.error(`❌ OpenRouter is not available - refusing to process payment`);
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Service temporarily unavailable",
+        details: "OpenRouter API is not responding. Please try again later."
+      }));
+      return;
+    }
+
+    console.log(`✅ OpenRouter availability confirmed`);
+  } catch (availError: any) {
+    console.error(`❌ OpenRouter availability check failed:`, availError);
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Service temporarily unavailable",
+      details: "Unable to verify service availability. Please try again later."
+    }));
+    return;
+  }
+
   // Verify payment
   try {
     const payment = decodePaymentSignature(paymentSignature);
@@ -1179,61 +1210,41 @@ ${contractsSection}
 
 Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
 
-    // Initialize OpenRouter SDK
-    const openrouter = new OpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY
+    console.log(`🤖 Sending audit request to OpenRouter with fallback support...`);
+
+    // Call OpenRouter API with fallback and retry logic
+    interface AuditResponse {
+      findings: any[];
+      summary: string;
+      recommendations: string[];
+    }
+
+    const openRouterResult = await callOpenRouterJSON<AuditResponse>({
+      systemMessage,
+      userMessage,
+      maxTokens: 32768,
+      temperature: 0.7,
+      models: TOOL_CONFIG.openRouter.fallbackModels,
+      skipValidation: true, // We already validated availability above
     });
 
-    console.log(`🤖 Sending audit request to OpenRouter...`);
-
-    // Call OpenRouter API
-    const result = await openrouter.chat.send({
-      chatRequest: {
-        model: TOOL_CONFIG.openRouter.model,
-        messages: [
-          {
-            role: "system",
-            content: systemMessage
-          },
-          {
-            role: "user",
-            content: userMessage
-          }
-        ],
-        maxTokens: 32768,
-        temperature: 0.7,
-        stream: false,
-        responseFormat: {
-          type: "json_object"
-        }
-      }
-    });
-
-    // Extract response from OpenRouter SDK result
-    const responseData = result as any;
-    const aiResponse = responseData.choices?.[0]?.message?.content || "{}";
-    const tokensUsed = responseData.usage?.total_tokens || 0;
-
-    console.log(`✅ Received audit response from OpenRouter (${tokensUsed} tokens)`);
-
-    // Parse AI response
-    let auditData: any;
-    try {
-      auditData = JSON.parse(aiResponse);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
+    if (!openRouterResult.success || !openRouterResult.parsed) {
+      console.error(`❌ OpenRouter request failed:`, openRouterResult.error);
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
-        error: "Failed to parse AI response"
+        error: "AI service request failed",
+        details: openRouterResult.error || "Unknown error",
+        attemptedModels: openRouterResult.attemptedModels
       }));
       return;
     }
 
+    const { parsed: auditData, model, tokensUsed } = openRouterResult;
     const findings = auditData.findings || [];
     const summary = auditData.summary || "No summary provided";
     const recommendations = auditData.recommendations || [];
 
-    console.log(`   Found ${findings.length} issues`);
+    console.log(`✅ Success with ${model} (${tokensUsed} tokens, ${findings.length} findings)`);
 
     // Count findings by severity
     const severityCounts = {
@@ -1354,7 +1365,7 @@ Please perform a complete security audit of the above contracts against the prov
       markdown: markdownReport,
       findingsCount: findings.length,
       severity: severityCounts,
-      model: TOOL_CONFIG.openRouter.model,
+      model: model,
       tokensUsed: tokensUsed
     }));
 
