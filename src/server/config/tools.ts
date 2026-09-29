@@ -35,8 +35,19 @@ export const TOOL_CONFIG = {
   // OpenRouter Configuration
   openRouter: {
     apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-    model: "openrouter/auto-beta",
-    maxTokens: 2000
+    model: "openrouter/auto-beta", // Primary model (with auto-routing)
+    maxTokens: 2000,
+    // Fallback models for reliability (tried in order if primary fails)
+    fallbackModels: [
+      "openrouter/auto-beta",           // Smart routing to best available model
+      "anthropic/claude-3.5-sonnet",    // High quality, reliable
+      "openai/gpt-4o",                  // Excellent for code analysis
+      "openai/gpt-3.5-turbo",           // Always available, fast, cost-effective
+    ] as string[],
+    // Retry configuration
+    maxRetriesPerModel: 2,
+    timeoutMs: 45000, // 45 seconds per request
+    enablePrePaymentValidation: true, // Test availability before settling payment
   },
 
   // Payment Configuration (amounts in USDC with 6 decimals)
