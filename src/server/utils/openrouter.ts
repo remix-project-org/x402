@@ -223,7 +223,14 @@ export async function callOpenRouterWithFallback(
 
         // Extract response
         const content = result.choices?.[0]?.message?.content || "";
-        const tokensUsed = result.usage?.total_tokens || 0;
+
+        // Try multiple paths for token usage (different SDK versions/models may use different formats)
+        const tokensUsed =
+          result.usage?.total_tokens ||
+          result.usage?.totalTokens ||
+          result.totalTokens ||
+          (result.usage?.prompt_tokens || 0) + (result.usage?.completion_tokens || 0) ||
+          0;
 
         if (!content) {
           throw new Error("Empty response from OpenRouter");
