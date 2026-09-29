@@ -953,7 +953,11 @@ Return a JSON object with this structure:
     const matches = parsed.matches || [];
     const skippedReason = parsed.skipped_reason;
 
-    console.log(`✅ Success with ${model} (${tokensUsed} tokens, ${matches.length} matches)`)
+    console.log(`✅ Success with ${model} (${tokensUsed} tokens)`);
+    console.log(`   📋 Matched ${matches.length} audit categories from checklist (e.g., ERC20 mechanics, access control, etc.)`);
+    if (matches.length > 0) {
+      console.log(`   🔍 Categories: ${matches.slice(0, 3).map((m: any) => m.path.split('::').pop()).join(', ')}${matches.length > 3 ? `, +${matches.length - 3} more` : ''}`);
+    }
 
     // Generate markdown report
     const contractName = contractSkeletons.map(c => c.filename).join(', ');
@@ -1244,8 +1248,6 @@ Please perform a complete security audit of the above contracts against the prov
     const summary = auditData.summary || "No summary provided";
     const recommendations = auditData.recommendations || [];
 
-    console.log(`✅ Success with ${model} (${tokensUsed} tokens, ${findings.length} findings)`);
-
     // Count findings by severity
     const severityCounts = {
       critical: findings.filter((f: any) => f.severity === 'CRITICAL').length,
@@ -1254,6 +1256,14 @@ Please perform a complete security audit of the above contracts against the prov
       low: findings.filter((f: any) => f.severity === 'LOW').length,
       informational: findings.filter((f: any) => f.severity === 'INFORMATIONAL').length
     };
+
+    console.log(`✅ Success with ${model} (${tokensUsed} tokens)`);
+    console.log(`   🔍 Found ${findings.length} security issues/vulnerabilities in the contract code`);
+    console.log(`   📊 Severity breakdown: 🔴 ${severityCounts.critical} Critical, 🟠 ${severityCounts.high} High, 🟡 ${severityCounts.medium} Medium, 🟢 ${severityCounts.low} Low, ℹ️  ${severityCounts.informational} Info`);
+    if (findings.length > 0) {
+      const topFindings = findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`);
+      console.log(`   🚨 Top issues: ${topFindings.join('; ')}${findings.length > 2 ? `, +${findings.length - 2} more` : ''}`);
+    }
 
     // Generate markdown audit report
     const reportLines: string[] = [];
