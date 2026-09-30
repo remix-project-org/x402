@@ -15,15 +15,15 @@ import { OpenRouter } from "@openrouter/sdk";
  * Models are tried in order until one succeeds
  *
  * Priority order:
- * 1. openrouter/auto-beta - Smart routing to best available model
+ * 1. deepseek/deepseek-v4.1-flash - Fast and cost-effective primary model
  * 2. anthropic/claude-sonnet-5.5 - Latest Sonnet model, high quality and reliable
  * 3. openai/gpt-4o - Excellent for code analysis
  * 4. openai/gpt-3.5-turbo - Always available, fast, cost-effective fallback
  */
 export const OPENROUTER_FALLBACK_MODELS = [
   {
-    model: "openrouter/auto-beta",
-    description: "OpenRouter auto-routing (primary)",
+    model: "deepseek/deepseek-v4.1-flash",
+    description: "DeepSeek v4.1 Flash (primary)",
     maxRetries: 2,
     timeout: 60000, // 60 seconds
   },
