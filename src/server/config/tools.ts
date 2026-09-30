@@ -39,8 +39,7 @@ export const TOOL_CONFIG = {
     maxTokens: 2000,
     // Fallback models for reliability (tried in order if primary fails)
     fallbackModels: [
-      "openrouter/auto-beta",           // Smart routing to best available model
-      "anthropic/claude-3.5-sonnet",    // High quality, reliable
+      "anthropic/claude-sonnet-5.5",    // Latest Sonnet model, high quality and reliable
       "openai/gpt-4o",                  // Excellent for code analysis
       "openai/gpt-3.5-turbo",           // Always available, fast, cost-effective
     ] as string[],
