@@ -29,6 +29,7 @@ import {
   testOpenRouterAvailability,
   callOpenRouterJSON
 } from "./utils/openrouter.js";
+import { httpLogger, paymentLogger, logError } from "./utils/logger.js";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
@@ -58,7 +59,7 @@ function getFacilitatorClient(): HTTPFacilitatorClient {
 
   const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
-  console.log(`🔐 Facilitator: CDP - ${FACILITATOR_URL}`);
+  paymentLogger.info({ facilitatorUrl: FACILITATOR_URL }, "Facilitator: CDP");
 
   // Create HTTPFacilitatorClient with CDP authentication
   // CDP requires JWT bearer tokens signed with Ed25519 for each request
@@ -262,7 +263,12 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
     const amount = payment.payload?.authorization?.value;
     const network = payment.accepted?.network || payment.network;
 
-    console.log(`💰 Payment: ${amount} units from ${from?.slice(0, 10)}... to ${to?.slice(0, 10)}... on ${network}`);
+    paymentLogger.info({
+      amount,
+      from: from?.slice(0, 10) + '...',
+      to: to?.slice(0, 10) + '...',
+      network
+    }, "Payment received");
 
     // Normalize payment object for facilitator
     // IMPORTANT: resource field is required for CDP Bazaar indexing
@@ -311,36 +317,39 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
     const client = getFacilitatorClient();
 
     // Step 1: Verify payment authorization
-    console.log(`🔍 Verifying payment...`);
+    paymentLogger.info("Verifying payment...");
     const verifyResponse = await client.verify(normalizedPayment, paymentRequirements);
 
     if (!verifyResponse.isValid) {
-      console.error(`❌ Verification failed: ${verifyResponse.invalidReason || 'unknown'}`);
+      paymentLogger.error({
+        invalidReason: verifyResponse.invalidReason || 'unknown'
+      }, "Verification failed");
       return false;
     }
 
-    console.log(`✅ Payment verified successfully`);
+    paymentLogger.info("Payment verified successfully");
 
     // Step 2: Settle the verified payment
-    console.log(`⛓️  Settling payment...`);
+    paymentLogger.info("Settling payment...");
     const settleResponse = await client.settle(normalizedPayment, paymentRequirements);
 
     if (!settleResponse.success) {
-      console.error(`❌ Settlement failed: ${settleResponse.errorReason || 'unknown'}`);
-      if (settleResponse.errorMessage) {
-        console.error(`   ${settleResponse.errorMessage}`);
-      }
+      paymentLogger.error({
+        errorReason: settleResponse.errorReason || 'unknown',
+        errorMessage: settleResponse.errorMessage
+      }, "Settlement failed");
       return false;
     }
 
-    console.log(`✅ Payment settled - TX: ${settleResponse.transaction || 'N/A'}`);
+    paymentLogger.info({
+      transaction: settleResponse.transaction || 'N/A'
+    }, "Payment settled");
     return true;
   } catch (error: any) {
-    console.error(`❌ Payment error: ${error.message}`);
-    if (error.response) {
-      console.error(`   Response status: ${error.response.status}`);
-      console.error(`   Response data:`, JSON.stringify(error.response.data, null, 2));
-    }
+    logError(paymentLogger, error, {
+      responseStatus: error.response?.status,
+      responseData: error.response?.data
+    });
     return false;
   }
 }
@@ -458,7 +467,7 @@ contract MyToken {
     const compilerVersion = version || TOOL_CONFIG.compiler.version;
     const compilerSettings = settings || TOOL_CONFIG.compiler.defaultSettings;
 
-    console.log(`🔨 Compiling with ${compilerVersion}...`);
+    httpLogger.info({ version: compilerVersion }, "Compiling Solidity contracts");
 
     const compiler = new Compiler();
 
@@ -507,7 +516,7 @@ contract MyToken {
     });
 
   } catch (error: any) {
-    console.error("Compilation error:", error);
+    logError(httpLogger, error, { endpoint: '/compile' });
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       error: "Compilation failed"
@@ -621,7 +630,7 @@ contract Example {
     }
 
     // Call Remix Slither API
-    console.log(`🔍 Running Slither analysis...`);
+    httpLogger.info({ version: version || TOOL_CONFIG.slither.defaultVersion }, "Running Slither analysis");
 
     const response = await fetch(TOOL_CONFIG.slither.apiUrl, {
       method: "POST",
@@ -695,7 +704,9 @@ contract Example {
         findings: filteredFindings,
       };
     } else if (slitherResult && !slitherResult.success) {
-      console.error("Slither analysis failed:", slitherResult.error || slitherResult.message);
+      httpLogger.error({
+        error: slitherResult.error || slitherResult.message
+      }, "Slither analysis failed");
       analysisResult = {
         success: false,
         error: "Slither analysis failed",
@@ -719,7 +730,7 @@ contract Example {
     res.end(JSON.stringify(analysisResult));
 
   } catch (error: any) {
-    console.error("Analysis error:", error);
+    logError(httpLogger, error, { endpoint: '/analyze' });
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       error: "Analysis failed"
@@ -821,11 +832,11 @@ contract MyToken {
   // CRITICAL: Test OpenRouter availability BEFORE verifying payment
   // This ensures we don't settle payment if the service is unavailable
   try {
-    console.log(`🔍 Pre-payment validation: Testing OpenRouter availability...`);
+    httpLogger.info("Pre-payment validation: Testing OpenRouter availability");
     const isOpenRouterAvailable = await testOpenRouterAvailability();
 
     if (!isOpenRouterAvailable) {
-      console.error(`❌ OpenRouter is not available - refusing to process payment`);
+      httpLogger.error("OpenRouter is not available - refusing to process payment");
       res.writeHead(503, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: "Service temporarily unavailable",
@@ -834,9 +845,9 @@ contract MyToken {
       return;
     }
 
-    console.log(`✅ OpenRouter availability confirmed`);
+    httpLogger.info("OpenRouter availability confirmed");
   } catch (availError: any) {
-    console.error(`❌ OpenRouter availability check failed:`, availError);
+    logError(httpLogger, availError, { context: 'OpenRouter availability check' });
     res.writeHead(503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       error: "Service temporarily unavailable",
@@ -876,16 +887,19 @@ contract MyToken {
       return;
     }
 
-    console.log(`🔍 Processing audit checklist request...`);
-    console.log(`   Contract files: ${Object.keys(sources).join(', ')}`);
-    console.log(`   Max categories: ${maxCategories}`);
+    httpLogger.info({
+      contractFiles: Object.keys(sources),
+      maxCategories
+    }, "Processing audit checklist request");
 
     // Load and prepare the audit checklist
     const checklist = loadAuditChecklist();
     const flattenedCategories = flattenCategoriesForPrompt(checklist);
     const categoryListPrompt = generateCategoryListPrompt(flattenedCategories);
 
-    console.log(`   Loaded ${flattenedCategories.length} audit categories from checklist`);
+    httpLogger.info({
+      categoriesLoaded: flattenedCategories.length
+    }, "Loaded audit categories from checklist");
 
     // Process each contract and strip to skeleton
     const contractSkeletons: { filename: string; skeleton: string }[] = [];
@@ -926,7 +940,7 @@ Return a JSON object with this structure:
   "skipped_reason": "optional explanation if no matches"
 }`;
 
-    console.log(`🤖 Sending audit matching request to OpenRouter with fallback support...`);
+    httpLogger.info("Sending audit matching request to OpenRouter with fallback support");
 
     // Call OpenRouter API with fallback and retry logic
     const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
@@ -939,7 +953,10 @@ Return a JSON object with this structure:
     });
 
     if (!openRouterResult.success || !openRouterResult.parsed) {
-      console.error(`❌ OpenRouter request failed:`, openRouterResult.error);
+      httpLogger.error({
+        error: openRouterResult.error,
+        attemptedModels: openRouterResult.attemptedModels
+      }, "OpenRouter request failed");
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: "AI service request failed",
@@ -953,11 +970,12 @@ Return a JSON object with this structure:
     const matches = parsed.matches || [];
     const skippedReason = parsed.skipped_reason;
 
-    console.log(`✅ Success with ${model} (${tokensUsed} tokens)`);
-    console.log(`   📋 Matched ${matches.length} audit categories from checklist (e.g., ERC20 mechanics, access control, etc.)`);
-    if (matches.length > 0) {
-      console.log(`   🔍 Categories: ${matches.slice(0, 3).map((m: any) => m.path.split('::').pop()).join(', ')}${matches.length > 3 ? `, +${matches.length - 3} more` : ''}`);
-    }
+    httpLogger.info({
+      model,
+      tokensUsed,
+      matchedCategories: matches.length,
+      topCategories: matches.slice(0, 3).map((m: any) => m.path.split('::').pop())
+    }, "Audit checklist matching completed successfully");
 
     // Generate markdown report
     const contractName = contractSkeletons.map(c => c.filename).join(', ');
@@ -984,7 +1002,7 @@ Return a JSON object with this structure:
     }));
 
   } catch (error: any) {
-    console.error("Audit checklist error:", error);
+    logError(httpLogger, error, { endpoint: '/get_audit_checklist' });
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       error: "Audit checklist request failed"
@@ -1091,11 +1109,11 @@ contract MyToken {
   // CRITICAL: Test OpenRouter availability BEFORE verifying payment
   // This ensures we don't settle payment if the service is unavailable
   try {
-    console.log(`🔍 Pre-payment validation: Testing OpenRouter availability...`);
+    httpLogger.info("Pre-payment validation: Testing OpenRouter availability");
     const isOpenRouterAvailable = await testOpenRouterAvailability();
 
     if (!isOpenRouterAvailable) {
-      console.error(`❌ OpenRouter is not available - refusing to process payment`);
+      httpLogger.error("OpenRouter is not available - refusing to process payment");
       res.writeHead(503, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: "Service temporarily unavailable",
@@ -1104,9 +1122,9 @@ contract MyToken {
       return;
     }
 
-    console.log(`✅ OpenRouter availability confirmed`);
+    httpLogger.info("OpenRouter availability confirmed");
   } catch (availError: any) {
-    console.error(`❌ OpenRouter availability check failed:`, availError);
+    logError(httpLogger, availError, { context: 'OpenRouter availability check' });
     res.writeHead(503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       error: "Service temporarily unavailable",
@@ -1152,9 +1170,10 @@ contract MyToken {
       return;
     }
 
-    console.log(`🔍 Processing complete audit request...`);
-    console.log(`   Contract files: ${Object.keys(sources).join(', ')}`);
-    console.log(`   Checklist length: ${checklist.length} characters`);
+    httpLogger.info({
+      contractFiles: Object.keys(sources),
+      checklistLength: checklist.length
+    }, "Processing complete audit request");
 
     // Build contract sources section
     let contractsSection = '';
@@ -1214,7 +1233,7 @@ ${contractsSection}
 
 Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
 
-    console.log(`🤖 Sending audit request to OpenRouter with fallback support...`);
+    httpLogger.info("Sending audit request to OpenRouter with fallback support");
 
     // Call OpenRouter API with fallback and retry logic
     interface AuditResponse {
@@ -1233,7 +1252,10 @@ Please perform a complete security audit of the above contracts against the prov
     });
 
     if (!openRouterResult.success || !openRouterResult.parsed) {
-      console.error(`❌ OpenRouter request failed:`, openRouterResult.error);
+      httpLogger.error({
+        error: openRouterResult.error,
+        attemptedModels: openRouterResult.attemptedModels
+      }, "OpenRouter request failed");
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: "AI service request failed",
@@ -1257,13 +1279,13 @@ Please perform a complete security audit of the above contracts against the prov
       informational: findings.filter((f: any) => f.severity === 'INFORMATIONAL').length
     };
 
-    console.log(`✅ Success with ${model} (${tokensUsed} tokens)`);
-    console.log(`   🔍 Found ${findings.length} security issues/vulnerabilities in the contract code`);
-    console.log(`   📊 Severity breakdown: 🔴 ${severityCounts.critical} Critical, 🟠 ${severityCounts.high} High, 🟡 ${severityCounts.medium} Medium, 🟢 ${severityCounts.low} Low, ℹ️  ${severityCounts.informational} Info`);
-    if (findings.length > 0) {
-      const topFindings = findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`);
-      console.log(`   🚨 Top issues: ${topFindings.join('; ')}${findings.length > 2 ? `, +${findings.length - 2} more` : ''}`);
-    }
+    httpLogger.info({
+      model,
+      tokensUsed,
+      findingsCount: findings.length,
+      severity: severityCounts,
+      topFindings: findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`)
+    }, "Audit completed successfully");
 
     // Generate markdown audit report
     const reportLines: string[] = [];
@@ -1380,7 +1402,7 @@ Please perform a complete security audit of the above contracts against the prov
     }));
 
   } catch (error: any) {
-    console.error("Audit error:", error);
+    logError(httpLogger, error, { endpoint: '/do_audit' });
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       error: "Audit request failed"
@@ -1439,8 +1461,7 @@ export function startHttpX402Server() {
   const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS;
 
   if (!PAY_TO_ADDRESS) {
-    console.warn("\n⚠️  PAY_TO_ADDRESS not set. HTTP x402 server will not start.");
-    console.warn("   Set PAY_TO_ADDRESS environment variable to enable HTTP REST endpoints.\n");
+    httpLogger.warn("PAY_TO_ADDRESS not set. HTTP x402 server will not start. Set PAY_TO_ADDRESS environment variable to enable HTTP REST endpoints.");
     return null;
   }
 
@@ -1483,7 +1504,7 @@ export function startHttpX402Server() {
         }));
       }
     } catch (error: any) {
-      console.error("Request error:", error);
+      logError(httpLogger, error, { context: 'Request handling' });
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Internal server error" }));
     }
@@ -1492,30 +1513,30 @@ export function startHttpX402Server() {
   server.listen(HTTP_X402_PORT, () => {
     // Validate required environment variables
     if (!process.env.SERVER_BASE_URL) {
-      console.error(`\n❌ CRITICAL: SERVER_BASE_URL environment variable is not set!`);
-      console.error(`   This is REQUIRED for correct resource URLs in production.`);
-      console.error(`   Without it, internal hostnames will leak into payment responses.`);
-      console.error(`\n🛑 HTTP x402 server will not handle requests properly without SERVER_BASE_URL\n`);
+      httpLogger.error("CRITICAL: SERVER_BASE_URL environment variable is not set! This is REQUIRED for correct resource URLs in production. Without it, internal hostnames will leak into payment responses.");
       process.exit(1);
     }
 
-    console.log(`\n⚡ HTTP x402 Server running on http://localhost:${HTTP_X402_PORT}`);
-    console.log(`   POST /mcp/x402-http/compile - Compile Solidity (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`);
-    console.log(`   POST /mcp/x402-http/analyze - Slither analysis (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`);
-    console.log(`   POST /mcp/x402-http/get_audit_checklist - Get Audit checklist AI (${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC)`);
-    console.log(`   POST /mcp/x402-http/do_audit - Complete security audit report (${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC)`);
-    console.log(`   GET  /mcp/x402-http/ - Service information`);
-    console.log(`   GET  /mcp/x402-http/health - Health check`);
-    console.log(`\n   Also supports root paths: /compile, /analyze, /get_audit_checklist, /do_audit, /health`);
-    console.log(`\n🌐 Public Base URL: ${process.env.SERVER_BASE_URL}`);
-    console.log(`📡 These endpoints are x402-compatible and can be validated on agentic.market`);
+    httpLogger.info({
+      port: HTTP_X402_PORT,
+      baseUrl: process.env.SERVER_BASE_URL,
+      endpoints: {
+        compile: `POST /mcp/x402-http/compile (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`,
+        analyze: `POST /mcp/x402-http/analyze (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`,
+        get_audit_checklist: `POST /mcp/x402-http/get_audit_checklist (${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC)`,
+        do_audit: `POST /mcp/x402-http/do_audit (${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC)`,
+        info: 'GET /mcp/x402-http/',
+        health: 'GET /mcp/x402-http/health'
+      },
+      rootPathsSupported: ['/compile', '/analyze', '/get_audit_checklist', '/do_audit', '/health']
+    }, "HTTP x402 Server started successfully");
   });
 
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
-      console.error(`❌ Port ${HTTP_X402_PORT} is already in use. HTTP x402 server not started.`);
+      httpLogger.error({ port: HTTP_X402_PORT }, "Port already in use. HTTP x402 server not started");
     } else {
-      console.error("❌ HTTP x402 server error:", error);
+      logError(httpLogger, error, { context: 'HTTP x402 server startup' });
     }
   });
 

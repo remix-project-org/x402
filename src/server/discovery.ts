@@ -7,6 +7,7 @@
 
 import http from "http";
 import { getBazaarDiscoveryResponse } from "./config/bazaar.js";
+import { discoveryLogger, logError } from "./utils/logger.js";
 
 const DISCOVERY_PORT = process.env.DISCOVERY_PORT ? parseInt(process.env.DISCOVERY_PORT) : 8001;
 
@@ -39,9 +40,9 @@ export function startDiscoveryServer() {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(discoveryData, null, 2));
 
-          console.log(`[Discovery] Served metadata for ${discoveryData.resources.length} tools`);
+          discoveryLogger.info({ resourceCount: discoveryData.resources.length }, "Served discovery metadata");
         } catch (error) {
-          console.error("[Discovery] Error generating metadata:", error);
+          logError(discoveryLogger, error, { context: 'Generating discovery metadata' });
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Failed to generate discovery metadata" }));
         }
@@ -83,19 +84,24 @@ export function startDiscoveryServer() {
   });
 
   server.listen(DISCOVERY_PORT, () => {
-    console.log(`\n🔍 Discovery Server running on http://localhost:${DISCOVERY_PORT}`);
-    console.log(`   Discovery endpoint: http://localhost:${DISCOVERY_PORT}/discovery`);
-    console.log(`   Health check: http://localhost:${DISCOVERY_PORT}/health`);
-    console.log(`\n📡 For Bazaar indexing, expose: http://localhost:${DISCOVERY_PORT}/discovery`);
+    discoveryLogger.info({
+      port: DISCOVERY_PORT,
+      endpoints: {
+        discovery: `http://localhost:${DISCOVERY_PORT}/discovery`,
+        health: `http://localhost:${DISCOVERY_PORT}/health`
+      }
+    }, "Discovery Server started successfully");
   });
 
   // Handle server errors
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
-      console.error(`❌ Port ${DISCOVERY_PORT} is already in use. Discovery server not started.`);
-      console.error(`   Set DISCOVERY_PORT environment variable to use a different port.`);
+      discoveryLogger.error({
+        port: DISCOVERY_PORT,
+        suggestion: "Set DISCOVERY_PORT environment variable to use a different port"
+      }, "Port already in use. Discovery server not started");
     } else {
-      console.error("❌ Discovery server error:", error);
+      logError(discoveryLogger, error, { context: 'Discovery server startup' });
     }
   });
 
@@ -107,15 +113,15 @@ export function startDiscoveryServer() {
  */
 export function setupGracefulShutdown(server: http.Server) {
   const shutdown = () => {
-    console.log("\n🛑 Shutting down discovery server...");
+    discoveryLogger.info("Shutting down discovery server...");
     server.close(() => {
-      console.log("✅ Discovery server stopped");
+      discoveryLogger.info("Discovery server stopped");
       process.exit(0);
     });
 
     // Force shutdown after 5 seconds
     setTimeout(() => {
-      console.error("❌ Could not close connections in time, forcefully shutting down");
+      discoveryLogger.error("Could not close connections in time, forcefully shutting down");
       process.exit(1);
     }, 5000);
   };
