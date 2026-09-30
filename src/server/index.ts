@@ -14,6 +14,7 @@ import { getActiveNetwork, getSupportedNetworks } from "./config/network.js";
 import { TOOL_CONFIG, usdcToUsd } from "./config/tools.js";
 import { startDiscoveryServer, setupGracefulShutdown } from "./discovery.js";
 import { startHttpX402Server } from "./http-x402.js";
+import { serverLogger } from "./utils/logger.js";
 
 // Create MCP server instance
 const mcp = new FastMCP({
@@ -39,24 +40,36 @@ mcp.start({
   }
 });
 
-console.log("🚀 MCP Server running on http://localhost:8000/mcp");
-console.log("\n⚙️  Network Configuration:");
-console.log(`   Network: ${activeNetwork.displayName} (${activeNetwork.name})`);
-console.log(`   Chain ID: ${activeNetwork.chainId}`);
-console.log(`   RPC URL: ${activeNetwork.rpcUrl}`);
-console.log(`   Explorer: ${activeNetwork.explorerUrl}`);
-console.log(`   USDC Address: ${activeNetwork.usdcAddress}`);
-console.log(`   💰 Payments will be processed on ${activeNetwork.displayName}`);
-console.log("\n🔧 Compiler Configuration:");
-console.log(`   Solidity Version: ${TOOL_CONFIG.compiler.version}`);
-console.log(`   EVM Version: ${TOOL_CONFIG.compiler.defaultSettings.evmVersion}`);
-console.log(`   Optimizer: ${TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled ? 'enabled' : 'disabled'} (${TOOL_CONFIG.compiler.defaultSettings.optimizer.runs} runs)`);
-console.log("\n📦 Available tools:");
-console.log(`   - compile_solidity ($${usdcToUsd(TOOL_CONFIG.payments.compileSolidity).toFixed(2)} USDC)`);
-console.log(`   - analyze_with_slither ($${usdcToUsd(TOOL_CONFIG.payments.analyzeWithSlither).toFixed(2)} USDC)`);
-console.log(`   - compile_and_deploy (dynamic pricing, base: $${TOOL_CONFIG.payments.compileAndDeploy.baseFeeUsd.toFixed(2)} USDC + gas + ${TOOL_CONFIG.payments.compileAndDeploy.serviceFeePercentage * 100}% fee)`);
-console.log(`   - compile_and_deploy_multi_network (dynamic pricing for multiple networks)`);
-console.log(`\n💡 Available networks: ${getSupportedNetworks().join(", ")}`);
+serverLogger.info("MCP Server running on http://localhost:8000/mcp");
+serverLogger.info({
+  network: {
+    name: activeNetwork.name,
+    displayName: activeNetwork.displayName,
+    chainId: activeNetwork.chainId,
+    rpcUrl: activeNetwork.rpcUrl,
+    explorerUrl: activeNetwork.explorerUrl,
+    usdcAddress: activeNetwork.usdcAddress,
+  },
+}, "Network Configuration");
+serverLogger.info({
+  compiler: {
+    version: TOOL_CONFIG.compiler.version,
+    evmVersion: TOOL_CONFIG.compiler.defaultSettings.evmVersion,
+    optimizer: {
+      enabled: TOOL_CONFIG.compiler.defaultSettings.optimizer.enabled,
+      runs: TOOL_CONFIG.compiler.defaultSettings.optimizer.runs,
+    },
+  },
+}, "Compiler Configuration");
+serverLogger.info({
+  tools: {
+    compile_solidity: `$${usdcToUsd(TOOL_CONFIG.payments.compileSolidity).toFixed(2)} USDC`,
+    analyze_with_slither: `$${usdcToUsd(TOOL_CONFIG.payments.analyzeWithSlither).toFixed(2)} USDC`,
+    compile_and_deploy: `dynamic pricing, base: $${TOOL_CONFIG.payments.compileAndDeploy.baseFeeUsd.toFixed(2)} USDC + gas + ${TOOL_CONFIG.payments.compileAndDeploy.serviceFeePercentage * 100}% fee`,
+    compile_and_deploy_multi_network: "dynamic pricing for multiple networks",
+  },
+  supportedNetworks: getSupportedNetworks(),
+}, "Available Tools");
 
 // Start the Bazaar discovery server
 const discoveryServer = startDiscoveryServer();
