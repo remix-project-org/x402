@@ -35,7 +35,7 @@ export const TOOL_CONFIG = {
   // OpenRouter Configuration
   openRouter: {
     apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-    model: "openrouter/auto-beta", // Primary model (with auto-routing)
+    model: "deepseek/deepseek-v4.1-flash", // Primary model (fast and cost-effective)
     maxTokens: 2000,
     // Fallback models for reliability (tried in order if primary fails)
     fallbackModels: [
