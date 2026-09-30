@@ -16,7 +16,7 @@ import { OpenRouter } from "@openrouter/sdk";
  *
  * Priority order:
  * 1. openrouter/auto-beta - Smart routing to best available model
- * 2. anthropic/claude-3.5-sonnet - High quality, reliable
+ * 2. anthropic/claude-sonnet-5.5 - Latest Sonnet model, high quality and reliable
  * 3. openai/gpt-4o - Excellent for code analysis
  * 4. openai/gpt-3.5-turbo - Always available, fast, cost-effective fallback
  */
@@ -28,8 +28,8 @@ export const OPENROUTER_FALLBACK_MODELS = [
     timeout: 60000, // 60 seconds
   },
   {
-    model: "anthropic/claude-3.5-sonnet",
-    description: "Claude 3.5 Sonnet (high quality fallback)",
+    model: "anthropic/claude-sonnet-5.5",
+    description: "Claude Sonnet 5.5 (high quality fallback)",
     maxRetries: 2,
     timeout: 45000, // 45 seconds
   },
