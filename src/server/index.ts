@@ -16,6 +16,62 @@ import { startDiscoveryServer, setupGracefulShutdown } from "./discovery.js";
 import { startHttpX402Server } from "./http-x402.js";
 import { serverLogger } from "./utils/logger.js";
 
+/**
+ * Validate required environment variables
+ * Exits the process with error if any required variables are missing
+ */
+function validateRequiredEnvVars(): void {
+  const required: { name: string; description: string }[] = [
+    {
+      name: "SERVER_BASE_URL",
+      description: "Public base URL for x402 endpoints (e.g., https://api.remix.live/mcp/x402-http)"
+    },
+    {
+      name: "PAY_TO_ADDRESS",
+      description: "Your wallet address to receive payments (e.g., 0x...)"
+    },
+    {
+      name: "CDP_API_KEY_ID",
+      description: "Coinbase Developer Platform API Key ID (get from https://portal.cdp.coinbase.com/)"
+    },
+    {
+      name: "CDP_API_KEY_SECRET",
+      description: "Coinbase Developer Platform API Secret"
+    },
+    {
+      name: "OPENROUTER_API_KEY",
+      description: "OpenRouter API key for AI audit endpoints (get from https://openrouter.ai)"
+    }
+  ];
+
+  const missing = required.filter(({ name }) => !process.env[name]);
+
+  if (missing.length > 0) {
+    console.error("\n❌ CRITICAL: Missing required environment variables\n");
+    console.error("The following environment variables are required but not set:\n");
+
+    missing.forEach(({ name, description }) => {
+      console.error(`  ❌ ${name}`);
+      console.error(`     ${description}\n`);
+    });
+
+    console.error("Please set these variables in your .env file or environment.\n");
+    console.error("Example .env file:");
+    console.error("  SERVER_BASE_URL=https://api.remix.live/mcp/x402-http");
+    console.error("  PAY_TO_ADDRESS=0xYourWalletAddress");
+    console.error("  CDP_API_KEY_ID=your_cdp_key_id");
+    console.error("  CDP_API_KEY_SECRET=your_cdp_secret");
+    console.error("  OPENROUTER_API_KEY=your_openrouter_key\n");
+
+    process.exit(1);
+  }
+
+  serverLogger.info("✅ All required environment variables are set");
+}
+
+// Validate environment variables before starting servers
+validateRequiredEnvVars();
+
 // Create MCP server instance
 const mcp = new FastMCP({
   name: "remix-x402-server",
