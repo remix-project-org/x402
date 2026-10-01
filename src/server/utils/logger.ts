@@ -144,5 +144,45 @@ export const logHttpRequest = (data: HttpLogData) => {
   }
 };
 
+// Helper to log request received
+export const logRequestReceived = (method: string, path: string, hasPayment: boolean) => {
+  httpLogger.info({
+    method,
+    path,
+    hasPayment,
+    stage: 'request_received'
+  }, `Request received: ${method} ${path}`);
+};
+
+// Helper to log payment verification result
+export const logPaymentVerification = (success: boolean, reason?: string) => {
+  if (success) {
+    paymentLogger.info({ stage: 'payment_verified' }, 'Payment verification successful');
+  } else {
+    paymentLogger.error({
+      stage: 'payment_failed',
+      reason: reason || 'Unknown reason'
+    }, 'Payment verification failed');
+  }
+};
+
+// Helper to log response completion
+export const logResponseSent = (method: string, path: string, statusCode: number, durationMs: number, success: boolean) => {
+  const logData = {
+    method,
+    path,
+    statusCode,
+    durationMs,
+    success,
+    stage: 'response_sent'
+  };
+
+  if (statusCode >= 400) {
+    httpLogger.error(logData, `Response sent: ${method} ${path} - ${statusCode} (${durationMs}ms)`);
+  } else {
+    httpLogger.info(logData, `Response sent: ${method} ${path} - ${statusCode} (${durationMs}ms)`);
+  }
+};
+
 // Export default logger
 export default logger;

@@ -29,7 +29,7 @@ import {
   testOpenRouterAvailability,
   callOpenRouterJSON
 } from "./utils/openrouter.js";
-import { httpLogger, paymentLogger, logError } from "./utils/logger.js";
+import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVerification, logResponseSent } from "./utils/logger.js";
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
@@ -358,6 +358,14 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
  * Handle /compile endpoint - Solidity compilation
  */
 async function handleCompile(req: http.IncomingMessage, res: http.ServerResponse) {
+  const startTime = Date.now();
+  const method = req.method || 'POST';
+  const path = '/compile';
+
+  // Log request received
+  const paymentSignature = req.headers["payment-signature"] as string;
+  logRequestReceived(method, path, !!paymentSignature);
+
   // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
   // Without this, internal hostnames leak into 402 responses and payment payloads
   if (!process.env.SERVER_BASE_URL) {
@@ -429,16 +437,15 @@ contract MyToken {
 
   const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
 
-  // Check for payment signature
-  const paymentSignature = req.headers["payment-signature"] as string;
-
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
+    httpLogger.info({ path, stage: 'payment_required' }, 'No payment provided, returning 402');
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
     });
     res.end(JSON.stringify(v2Response, null, 2));
+    logResponseSent(method, path, 402, Date.now() - startTime, false);
     return;
   }
 
@@ -448,10 +455,14 @@ contract MyToken {
     const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
 
     if (!isValid) {
+      logPaymentVerification(false, 'Invalid or unconfirmed payment');
       res.writeHead(402, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Invalid or unconfirmed payment" }));
+      logResponseSent(method, path, 402, Date.now() - startTime, false);
       return;
     }
+
+    logPaymentVerification(true);
 
     // Payment verified - execute compilation
     const body = await parseBody(req);
@@ -481,6 +492,7 @@ contract MyToken {
         })).toString("base64");
 
         if (success) {
+          httpLogger.info({ path, stage: 'compilation_success' }, 'Compilation completed successfully');
           res.writeHead(200, {
             "Content-Type": "application/json",
             "PAYMENT-RESPONSE": paymentResponseHeader,
@@ -493,8 +505,10 @@ contract MyToken {
             settings: compilerSettings,
             version: compilerVersion,
           }));
+          logResponseSent(method, path, 200, Date.now() - startTime, true);
           resolve();
         } else {
+          httpLogger.error({ path, stage: 'compilation_failed', errors: data.errors || [] }, 'Compilation failed');
           res.writeHead(200, {
             "Content-Type": "application/json",
             "PAYMENT-RESPONSE": paymentResponseHeader,
@@ -504,6 +518,7 @@ contract MyToken {
             errors: data.errors || [],
             version: compilerVersion,
           }));
+          logResponseSent(method, path, 200, Date.now() - startTime, false);
           resolve();
         }
       });
@@ -521,6 +536,7 @@ contract MyToken {
     res.end(JSON.stringify({
       error: "Compilation failed"
     }));
+    logResponseSent(method, path, 500, Date.now() - startTime, false);
   }
 }
 
