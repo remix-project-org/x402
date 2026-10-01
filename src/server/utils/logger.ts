@@ -1,4 +1,5 @@
 import pino from 'pino';
+import pretty from 'pino-pretty';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 
@@ -29,56 +30,50 @@ const baseConfig: pino.LoggerOptions = {
   },
 };
 
-// Create multiple transports for different log files
-const transport = pino.transport({
-  targets: [
-    // Console output with pretty printing in development
-    {
-      target: 'pino-pretty',
-      level: logLevel,
-      options: {
-        colorize: isDevelopment,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname',
-        singleLine: false,
-        destination: 1, // stdout
-      },
-    },
-    // All logs to combined.log
-    {
+// Create multiple streams for different outputs
+// CRITICAL: Console stream must be SYNCHRONOUS to show logs immediately
+// File streams can be async workers for performance
+const streams: pino.StreamEntry[] = [
+  // Console output with pretty printing (SYNCHRONOUS - no worker threads)
+  {
+    level: logLevel as pino.Level,
+    stream: pretty({
+      colorize: isDevelopment,
+      translateTime: 'SYS:standard',
+      ignore: 'pid,hostname',
+      singleLine: false,
+      sync: true, // Force synchronous output
+    }),
+  },
+  // File transports for audit trails (async workers are OK for files)
+  // combined.log: Complete audit trail of all operations (payments, requests, errors, etc.)
+  {
+    level: 'debug' as pino.Level,
+    stream: pino.transport({
       target: 'pino-roll',
-      level: 'debug',
       options: {
         file: join(logsDir, 'combined.log'),
         frequency: 'daily',
         mkdir: true,
       },
-    },
-    // Error logs to error.log
-    {
+    }),
+  },
+  // error.log: Errors only for quick troubleshooting
+  {
+    level: 'error' as pino.Level,
+    stream: pino.transport({
       target: 'pino-roll',
-      level: 'error',
       options: {
         file: join(logsDir, 'error.log'),
         frequency: 'daily',
         mkdir: true,
       },
-    },
-    // HTTP request logs to http.log
-    {
-      target: 'pino-roll',
-      level: 'info',
-      options: {
-        file: join(logsDir, 'http.log'),
-        frequency: 'daily',
-        mkdir: true,
-      },
-    },
-  ],
-});
+    }),
+  },
+];
 
-// Create main logger
-export const logger = pino(baseConfig, transport);
+// Create main logger with multistream
+export const logger = pino(baseConfig, pino.multistream(streams));
 
 // Create child loggers for different components
 export const createChildLogger = (component: string) => {
