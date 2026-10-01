@@ -33,6 +33,38 @@ import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVeri
 
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
+/**
+ * Create a detailed error response for failures after payment settlement
+ * This ensures users get comprehensive error information when they've already paid
+ */
+function createPostPaymentErrorResponse(
+  error: any,
+  endpoint: string,
+  additionalContext?: Record<string, any>
+): {
+  response: any;
+  requestId: string;
+} {
+  const requestId = `${endpoint.replace('/', '')}-${Date.now()}`;
+
+  const errorResponse = {
+    success: false,
+    error: "Service execution failed",
+    message: error.message || `An unexpected error occurred during ${endpoint} execution`,
+    errorType: error.name || "Error",
+    paymentStatus: "settled",
+    requestId,
+    timestamp: new Date().toISOString(),
+    ...(additionalContext || {}),
+    ...(process.env.NODE_ENV !== 'production' && {
+      stack: error.stack,
+      details: error.toString()
+    })
+  };
+
+  return { response: errorResponse, requestId };
+}
+
 // Facilitator Configuration
 // The facilitator settles payments on behalf of the server (facilitator pays gas)
 //
@@ -469,8 +501,27 @@ contract MyToken {
     const { sources, version, settings } = body;
 
     if (!sources) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: sources" }));
+      const errorResponse = {
+        success: false,
+        error: "Missing required field: sources",
+        message: "The 'sources' field is required in the request body. It should be an object mapping file names to source code.",
+        paymentStatus: "settled",
+        requestId: `compile-${Date.now()}`,
+        timestamp: new Date().toISOString()
+      };
+
+      httpLogger.error({ path, error: errorResponse, stage: 'post_payment_failure' }, 'Request failed after payment settled');
+
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
+      res.end(JSON.stringify(errorResponse));
+      logResponseSent(method, path, 400, Date.now() - startTime, false);
       return;
     }
 
@@ -531,11 +582,25 @@ contract MyToken {
     });
 
   } catch (error: any) {
-    logError(httpLogger, error, { endpoint: '/compile' });
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Compilation failed"
-    }));
+    // Payment was settled, but service failed - provide detailed error info
+    const { response: errorResponse, requestId } = createPostPaymentErrorResponse(error, '/compile');
+
+    logError(httpLogger, error, {
+      endpoint: '/compile',
+      requestId,
+      stage: 'post_payment_failure',
+      paymentSettled: true
+    });
+
+    res.writeHead(500, {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+        status: "settled",
+        network: requirementsWithExtensions.accepts[0]!.network,
+        amount: requirementsWithExtensions.accepts[0]!.amount,
+      })).toString("base64")
+    });
+    res.end(JSON.stringify(errorResponse));
     logResponseSent(method, path, 500, Date.now() - startTime, false);
   }
 }
@@ -746,11 +811,25 @@ contract Example {
     res.end(JSON.stringify(analysisResult));
 
   } catch (error: any) {
-    logError(httpLogger, error, { endpoint: '/analyze' });
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Analysis failed"
-    }));
+    // Payment was settled, but service failed - provide detailed error info
+    const { response: errorResponse, requestId } = createPostPaymentErrorResponse(error, '/analyze');
+
+    logError(httpLogger, error, {
+      endpoint: '/analyze',
+      requestId,
+      stage: 'post_payment_failure',
+      paymentSettled: true
+    });
+
+    res.writeHead(500, {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+        status: "settled",
+        network: requirementsWithExtensions.accepts[0]!.network,
+        amount: requirementsWithExtensions.accepts[0]!.amount,
+      })).toString("base64")
+    });
+    res.end(JSON.stringify(errorResponse));
   }
 }
 
@@ -1018,11 +1097,25 @@ Return a JSON object with this structure:
     }));
 
   } catch (error: any) {
-    logError(httpLogger, error, { endpoint: '/get_audit_checklist' });
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Audit checklist request failed"
-    }));
+    // Payment was settled, but service failed - provide detailed error info
+    const { response: errorResponse, requestId } = createPostPaymentErrorResponse(error, '/get_audit_checklist');
+
+    logError(httpLogger, error, {
+      endpoint: '/get_audit_checklist',
+      requestId,
+      stage: 'post_payment_failure',
+      paymentSettled: true
+    });
+
+    res.writeHead(500, {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+        status: "settled",
+        network: requirementsWithExtensions.accepts[0]!.network,
+        amount: requirementsWithExtensions.accepts[0]!.amount,
+      })).toString("base64")
+    });
+    res.end(JSON.stringify(errorResponse));
   }
 }
 
@@ -1418,11 +1511,25 @@ Please perform a complete security audit of the above contracts against the prov
     }));
 
   } catch (error: any) {
-    logError(httpLogger, error, { endpoint: '/do_audit' });
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Audit request failed"
-    }));
+    // Payment was settled, but service failed - provide detailed error info
+    const { response: errorResponse, requestId } = createPostPaymentErrorResponse(error, '/do_audit');
+
+    logError(httpLogger, error, {
+      endpoint: '/do_audit',
+      requestId,
+      stage: 'post_payment_failure',
+      paymentSettled: true
+    });
+
+    res.writeHead(500, {
+      "Content-Type": "application/json",
+      "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+        status: "settled",
+        network: requirementsWithExtensions.accepts[0]!.network,
+        amount: requirementsWithExtensions.accepts[0]!.amount,
+      })).toString("base64")
+    });
+    res.end(JSON.stringify(errorResponse));
   }
 }
 
