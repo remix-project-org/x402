@@ -53,8 +53,17 @@ export const TOOL_CONFIG = {
   payments: {
     compileSolidity: "10000",        // 0.01 USDC
     analyzeWithSlither: "20000",     // 0.02 USDC
-    getAuditChecklist: "50000",      // 0.05 USDC
-    doAudit: "100000",               // 0.10 USDC (full audit report)
+    // Model-based pricing for AI audit endpoints
+    getAuditChecklist: {
+      DeepSeek: "50000",             // 0.05 USDC - DeepSeek v4.1
+      Sonnet: "150000",              // 0.15 USDC - Claude Sonnet 5.5
+      Fable: "300000"                // 0.30 USDC - Claude Fable 5
+    },
+    doAudit: {
+      DeepSeek: "150000",            // 0.15 USDC - DeepSeek v4.1
+      Sonnet: "250000",              // 0.25 USDC - Claude Sonnet 5.5
+      Fable: "700000"                // 0.70 USDC - Claude Fable 5
+    },
     compileAndDeploy: {
       baseFee: "50000",              // 0.05 USDC (minimum/fallback)
       baseFeeUsd: 0.05,              // Base service fee in USD
@@ -90,6 +99,24 @@ export const TOOL_CONFIG = {
  */
 export function usdcToUsd(usdcAmount: string): number {
   return parseInt(usdcAmount) / 1_000_000;
+}
+
+/**
+ * Helper function to get audit checklist price for a specific model
+ * @param model - Model name (DeepSeek, Sonnet, or Fable)
+ * @returns USDC amount as string (with 6 decimals)
+ */
+export function getAuditChecklistPrice(model: "DeepSeek" | "Sonnet" | "Fable"): string {
+  return TOOL_CONFIG.payments.getAuditChecklist[model];
+}
+
+/**
+ * Helper function to get audit price for a specific model
+ * @param model - Model name (DeepSeek, Sonnet, or Fable)
+ * @returns USDC amount as string (with 6 decimals)
+ */
+export function getDoAuditPrice(model: "DeepSeek" | "Sonnet" | "Fable"): string {
+  return TOOL_CONFIG.payments.doAudit[model];
 }
 
 /**

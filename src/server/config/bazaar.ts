@@ -289,11 +289,25 @@ contract Example {
 export const GET_AUDIT_CHECKLIST_METADATA = {
   resource: `${SERVER_BASE_URL}/get_audit_checklist`,
   type: "http" as const,
-  description: "AI-powered smart contract audit checklist matching using OpenRouter - analyzes contract code and returns relevant security checklist items as markdown",
+  description: "AI-powered smart contract audit checklist matching - analyzes contract code and returns relevant security checklist items. PRICING (based on model): DeepSeek: $0.05 USDC, Sonnet: $0.15 USDC, Fable: $0.30 USDC. Payment must match selected model.",
   accepts: [
     {
       asset: "USDC",
-      amount: TOOL_CONFIG.payments.getAuditChecklist,
+      amount: TOOL_CONFIG.payments.getAuditChecklist.DeepSeek, // Minimum price (DeepSeek)
+      network: `eip155:${activeNetwork.chainId}`,
+      payTo: "", // Will be injected by injectPayToAddress()
+      scheme: "exact" as const,
+    },
+    {
+      asset: "USDC",
+      amount: TOOL_CONFIG.payments.getAuditChecklist.Sonnet, // Mid-tier price (Sonnet)
+      network: `eip155:${activeNetwork.chainId}`,
+      payTo: "", // Will be injected by injectPayToAddress()
+      scheme: "exact" as const,
+    },
+    {
+      asset: "USDC",
+      amount: TOOL_CONFIG.payments.getAuditChecklist.Fable, // Premium price (Fable)
       network: `eip155:${activeNetwork.chainId}`,
       payTo: "", // Will be injected by injectPayToAddress()
       scheme: "exact" as const,
@@ -305,7 +319,7 @@ export const GET_AUDIT_CHECKLIST_METADATA = {
         input: {
           type: "http" as const,
           method: "POST",
-          description: "Get AI-matched security audit checklist for smart contracts. Analyzes contract code and returns relevant security categories from a comprehensive checklist.",
+          description: "Get AI-matched security audit checklist for smart contracts. Analyzes contract code and returns relevant security categories from a comprehensive checklist. PRICING: DeepSeek ($0.05), Sonnet ($0.15), Fable ($0.30) - payment must match selected model.",
           bodyType: "json" as const,
           inputSchema: {
             type: "object",
@@ -327,7 +341,7 @@ export const GET_AUDIT_CHECKLIST_METADATA = {
               model: {
                 type: "string",
                 enum: ["DeepSeek", "Sonnet", "Fable"],
-                description: "AI model to use for analysis. Required. DeepSeek: fast and cost-effective, Sonnet: high quality, Fable: balanced performance"
+                description: "AI model to use for analysis (Required). DeepSeek ($0.05): fast and cost-effective. Sonnet ($0.15): high quality. Fable ($0.30): premium quality. Payment amount must match selected model."
               },
               maxCategories: {
                 type: "number",
@@ -381,11 +395,25 @@ contract MyToken {
 export const DO_AUDIT_METADATA = {
   resource: `${SERVER_BASE_URL}/do_audit`,
   type: "http" as const,
-  description: "Complete AI-powered smart contract security audit report - analyzes contract code against security checklist and provides detailed findings with severity levels",
+  description: "Complete AI-powered smart contract security audit - analyzes code against checklist and provides detailed findings with severity levels. PRICING (based on model): DeepSeek: $0.15 USDC, Sonnet: $0.25 USDC, Fable: $0.70 USDC. Payment must match selected model.",
   accepts: [
     {
       asset: "USDC",
-      amount: TOOL_CONFIG.payments.doAudit,
+      amount: TOOL_CONFIG.payments.doAudit.DeepSeek, // Minimum price (DeepSeek)
+      network: `eip155:${activeNetwork.chainId}`,
+      payTo: "", // Will be injected by injectPayToAddress()
+      scheme: "exact" as const,
+    },
+    {
+      asset: "USDC",
+      amount: TOOL_CONFIG.payments.doAudit.Sonnet, // Mid-tier price (Sonnet)
+      network: `eip155:${activeNetwork.chainId}`,
+      payTo: "", // Will be injected by injectPayToAddress()
+      scheme: "exact" as const,
+    },
+    {
+      asset: "USDC",
+      amount: TOOL_CONFIG.payments.doAudit.Fable, // Premium price (Fable)
       network: `eip155:${activeNetwork.chainId}`,
       payTo: "", // Will be injected by injectPayToAddress()
       scheme: "exact" as const,
@@ -397,7 +425,7 @@ export const DO_AUDIT_METADATA = {
         input: {
           type: "http" as const,
           method: "POST",
-          description: "Perform comprehensive security audit of smart contracts. Takes contract sources and audit checklist, returns detailed findings with severity levels, recommendations, and full markdown report.",
+          description: "Perform comprehensive security audit of smart contracts. Takes contract sources and audit checklist, returns detailed findings with severity levels, recommendations, and full markdown report. PRICING: DeepSeek ($0.15), Sonnet ($0.25), Fable ($0.70) - payment must match selected model.",
           bodyType: "json" as const,
           inputSchema: {
             type: "object",
@@ -423,7 +451,7 @@ export const DO_AUDIT_METADATA = {
               model: {
                 type: "string",
                 enum: ["DeepSeek", "Sonnet", "Fable"],
-                description: "AI model to use for analysis. Required. DeepSeek: fast and cost-effective, Sonnet: high quality, Fable: balanced performance"
+                description: "AI model to use for analysis (Required). DeepSeek ($0.15): fast and cost-effective. Sonnet ($0.25): high quality. Fable ($0.70): premium quality. Payment amount must match selected model."
               }
             },
             required: ["sources", "checklist", "model"]

@@ -13,8 +13,8 @@ import { URL } from "url";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
-import { TOOL_CONFIG } from "./config/tools.js";
-import { SERVICE_METADATA, COMPILE_SOLIDITY_METADATA, ANALYZE_SLITHER_METADATA } from "./config/bazaar.js";
+import { TOOL_CONFIG, getAuditChecklistPrice, getDoAuditPrice } from "./config/tools.js";
+import { SERVICE_METADATA, COMPILE_SOLIDITY_METADATA, ANALYZE_SLITHER_METADATA, GET_AUDIT_CHECKLIST_METADATA, DO_AUDIT_METADATA } from "./config/bazaar.js";
 import { Compiler } from "@remix-project/remix-solidity";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
 import {
@@ -843,8 +843,100 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
     throw new Error("SERVER_BASE_URL environment variable is required");
   }
   const resource = `${process.env.SERVER_BASE_URL}/get_audit_checklist`;
-  const amount = TOOL_CONFIG.payments.getAuditChecklist;
-  const description = "AI-powered smart contract audit checklist matching using OpenRouter - analyzes contract code and returns relevant security checklist items as markdown";
+  // Use metadata description which includes pricing info
+  const description = GET_AUDIT_CHECKLIST_METADATA.description;
+
+  // Parse request body FIRST to get the model parameter
+  // This allows us to return the correct price in the 402 response
+  const body = await parseBody(req);
+  const { model: requestedModel } = body;
+
+  // Validate model parameter is provided
+  if (!requestedModel || typeof requestedModel !== 'string') {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable",
+      hint: "The model parameter determines the price. DeepSeek: $0.05, Sonnet: $0.15, Fable: $0.30"
+    }));
+    return;
+  }
+
+  // Validate model is one of the allowed values
+  if (!['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: `Invalid model: ${requestedModel}. Must be one of: DeepSeek, Sonnet, Fable`,
+      pricing: {
+        DeepSeek: "$0.05 USDC",
+        Sonnet: "$0.15 USDC",
+        Fable: "$0.30 USDC"
+      }
+    }));
+    return;
+  }
+
+  // CRITICAL: Test OpenRouter availability BEFORE calculating price or accepting payment
+  // This ensures we never ask for payment if the selected model is unavailable
+  let openRouterModelId: string;
+  try {
+    openRouterModelId = mapModelName(requestedModel);
+  } catch (error: any) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: error.message }));
+    return;
+  }
+
+  httpLogger.info({
+    endpoint: '/get_audit_checklist',
+    requestedModel,
+    openRouterModelId
+  }, "Pre-request validation: Testing OpenRouter availability for selected model");
+
+  try {
+    const isOpenRouterAvailable = await testOpenRouterAvailability(openRouterModelId);
+
+    if (!isOpenRouterAvailable) {
+      httpLogger.error({
+        requestedModel,
+        openRouterModelId
+      }, "Selected model is not available - rejecting request");
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Service temporarily unavailable",
+        details: `The selected model "${requestedModel}" (${openRouterModelId}) is not responding. Please try again later or select a different model.`,
+        requestedModel,
+        availableModels: ["DeepSeek", "Sonnet", "Fable"]
+      }));
+      return;
+    }
+
+    httpLogger.info({
+      requestedModel,
+      openRouterModelId
+    }, "OpenRouter availability confirmed for selected model");
+  } catch (availError: any) {
+    logError(httpLogger, availError, {
+      context: 'OpenRouter pre-request availability check',
+      endpoint: '/get_audit_checklist',
+      requestedModel
+    });
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Service temporarily unavailable",
+      details: "Unable to verify service availability. Please try again later.",
+      requestedModel
+    }));
+    return;
+  }
+
+  // Get the correct amount based on selected model
+  const amount = getAuditChecklistPrice(requestedModel as "DeepSeek" | "Sonnet" | "Fable");
+
+  httpLogger.info({
+    endpoint: '/get_audit_checklist',
+    requestedModel,
+    requiredAmount: `${parseInt(amount) / 1_000_000} USDC`
+  }, "Processing request with model-specific pricing");
 
   // Define schemas and examples
   const inputSchema = {
@@ -899,6 +991,7 @@ contract MyToken {
   };
 
   // Create v2Response and requirements with extensions
+  // The 402 response shows the exact amount required for the selected model
   const endpointTags = ["security", "audit", "solidity", "smart-contract"];
   const v2Response = createPaymentRequiredResponse(
     resource,
@@ -917,38 +1010,12 @@ contract MyToken {
 
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
+    // We already verified the model is available above, so it's safe to ask for payment
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
     });
     res.end(JSON.stringify(v2Response, null, 2));
-    return;
-  }
-
-  // CRITICAL: Test OpenRouter availability BEFORE verifying payment
-  // This ensures we don't settle payment if the service is unavailable
-  try {
-    httpLogger.info("Pre-payment validation: Testing OpenRouter availability");
-    const isOpenRouterAvailable = await testOpenRouterAvailability();
-
-    if (!isOpenRouterAvailable) {
-      httpLogger.error("OpenRouter is not available - refusing to process payment");
-      res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: "Service temporarily unavailable",
-        details: "OpenRouter API is not responding. Please try again later."
-      }));
-      return;
-    }
-
-    httpLogger.info("OpenRouter availability confirmed");
-  } catch (availError: any) {
-    logError(httpLogger, availError, { context: 'OpenRouter availability check' });
-    res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Service temporarily unavailable",
-      details: "Unable to verify service availability. Please try again later."
-    }));
     return;
   }
 
@@ -964,8 +1031,8 @@ contract MyToken {
     }
 
     // Payment verified - process audit checklist request
-    const body = await parseBody(req);
-    const { sources, maxCategories = 12, model: requestedModel } = body;
+    // Body, model, and availability were already validated at the beginning
+    const { sources, maxCategories = 12 } = body;
 
     if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -973,19 +1040,27 @@ contract MyToken {
       return;
     }
 
-    if (!requestedModel || typeof requestedModel !== 'string') {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable" }));
-      return;
-    }
+    // openRouterModelId was already mapped and validated at the beginning
 
-    // Validate and map model name to OpenRouter model identifier
-    let openRouterModel: string;
-    try {
-      openRouterModel = mapModelName(requestedModel);
-    } catch (error: any) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: error.message }));
+    // Verify payment amount matches the selected model's price
+    // amount was already calculated at the beginning based on the model
+    const paidAmount = payment.amount.toString();
+
+    if (paidAmount !== amount) {
+      paymentLogger.error({
+        model: requestedModel,
+        expectedAmount: amount,
+        paidAmount,
+        stage: 'payment_amount_mismatch'
+      }, 'Payment amount does not match selected model price');
+
+      res.writeHead(402, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Payment amount mismatch",
+        details: `Selected model "${requestedModel}" requires ${parseInt(amount) / 1_000_000} USDC, but ${parseInt(paidAmount) / 1_000_000} USDC was paid`,
+        expectedAmount: amount,
+        paidAmount
+      }));
       return;
     }
 
@@ -1052,7 +1127,7 @@ Return a JSON object with this structure:
   "skipped_reason": "optional explanation if no matches"
 }`;
 
-    httpLogger.info({ selectedModel: requestedModel, openRouterModel }, "Sending audit matching request to OpenRouter");
+    httpLogger.info({ selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter");
 
     // Call OpenRouter API with user-selected model
     const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
@@ -1060,7 +1135,7 @@ Return a JSON object with this structure:
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
-      models: [openRouterModel], // Use single user-selected model
+      models: [openRouterModelId], // Use single user-selected model
       skipValidation: true, // We already validated availability above
     });
 
@@ -1145,8 +1220,100 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
     throw new Error("SERVER_BASE_URL environment variable is required");
   }
   const resource = `${process.env.SERVER_BASE_URL}/do_audit`;
-  const amount = TOOL_CONFIG.payments.doAudit;
-  const description = "Complete AI-powered smart contract security audit report - analyzes contract code against security checklist and provides detailed findings";
+  // Use metadata description which includes pricing info
+  const description = DO_AUDIT_METADATA.description;
+
+  // Parse request body FIRST to get the model parameter
+  // This allows us to return the correct price in the 402 response
+  const body = await parseBody(req);
+  const { model: requestedModel } = body;
+
+  // Validate model parameter is provided
+  if (!requestedModel || typeof requestedModel !== 'string') {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable",
+      hint: "The model parameter determines the price. DeepSeek: $0.15, Sonnet: $0.25, Fable: $0.70"
+    }));
+    return;
+  }
+
+  // Validate model is one of the allowed values
+  if (!['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: `Invalid model: ${requestedModel}. Must be one of: DeepSeek, Sonnet, Fable`,
+      pricing: {
+        DeepSeek: "$0.15 USDC",
+        Sonnet: "$0.25 USDC",
+        Fable: "$0.70 USDC"
+      }
+    }));
+    return;
+  }
+
+  // CRITICAL: Test OpenRouter availability BEFORE calculating price or accepting payment
+  // This ensures we never ask for payment if the selected model is unavailable
+  let openRouterModelId: string;
+  try {
+    openRouterModelId = mapModelName(requestedModel);
+  } catch (error: any) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: error.message }));
+    return;
+  }
+
+  httpLogger.info({
+    endpoint: '/do_audit',
+    requestedModel,
+    openRouterModelId
+  }, "Pre-request validation: Testing OpenRouter availability for selected model");
+
+  try {
+    const isOpenRouterAvailable = await testOpenRouterAvailability(openRouterModelId);
+
+    if (!isOpenRouterAvailable) {
+      httpLogger.error({
+        requestedModel,
+        openRouterModelId
+      }, "Selected model is not available - rejecting request");
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Service temporarily unavailable",
+        details: `The selected model "${requestedModel}" (${openRouterModelId}) is not responding. Please try again later or select a different model.`,
+        requestedModel,
+        availableModels: ["DeepSeek", "Sonnet", "Fable"]
+      }));
+      return;
+    }
+
+    httpLogger.info({
+      requestedModel,
+      openRouterModelId
+    }, "OpenRouter availability confirmed for selected model");
+  } catch (availError: any) {
+    logError(httpLogger, availError, {
+      context: 'OpenRouter pre-request availability check',
+      endpoint: '/do_audit',
+      requestedModel
+    });
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Service temporarily unavailable",
+      details: "Unable to verify service availability. Please try again later.",
+      requestedModel
+    }));
+    return;
+  }
+
+  // Get the correct amount based on selected model
+  const amount = getDoAuditPrice(requestedModel as "DeepSeek" | "Sonnet" | "Fable");
+
+  httpLogger.info({
+    endpoint: '/do_audit',
+    requestedModel,
+    requiredAmount: `${parseInt(amount) / 1_000_000} USDC`
+  }, "Processing request with model-specific pricing");
 
   // Define schemas and examples
   const inputSchema = {
@@ -1206,6 +1373,7 @@ contract MyToken {
   };
 
   // Create v2Response and requirements with extensions
+  // The 402 response shows the exact amount required for the selected model
   const endpointTags = ["security", "audit", "solidity", "smart-contract", "report"];
   const v2Response = createPaymentRequiredResponse(
     resource,
@@ -1224,38 +1392,12 @@ contract MyToken {
 
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
+    // We already verified the model is available above, so it's safe to ask for payment
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
     });
     res.end(JSON.stringify(v2Response, null, 2));
-    return;
-  }
-
-  // CRITICAL: Test OpenRouter availability BEFORE verifying payment
-  // This ensures we don't settle payment if the service is unavailable
-  try {
-    httpLogger.info("Pre-payment validation: Testing OpenRouter availability");
-    const isOpenRouterAvailable = await testOpenRouterAvailability();
-
-    if (!isOpenRouterAvailable) {
-      httpLogger.error("OpenRouter is not available - refusing to process payment");
-      res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: "Service temporarily unavailable",
-        details: "OpenRouter API is not responding. Please try again later."
-      }));
-      return;
-    }
-
-    httpLogger.info("OpenRouter availability confirmed");
-  } catch (availError: any) {
-    logError(httpLogger, availError, { context: 'OpenRouter availability check' });
-    res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Service temporarily unavailable",
-      details: "Unable to verify service availability. Please try again later."
-    }));
     return;
   }
 
@@ -1271,8 +1413,8 @@ contract MyToken {
     }
 
     // Payment verified - process audit request
-    const body = await parseBody(req);
-    const { sources, checklist, model: requestedModel } = body;
+    // Body, model, and availability were already validated at the beginning
+    const { sources, checklist } = body;
 
     if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -1286,19 +1428,27 @@ contract MyToken {
       return;
     }
 
-    if (!requestedModel || typeof requestedModel !== 'string') {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable" }));
-      return;
-    }
+    // openRouterModelId was already mapped and validated at the beginning
 
-    // Validate and map model name to OpenRouter model identifier
-    let openRouterModel: string;
-    try {
-      openRouterModel = mapModelName(requestedModel);
-    } catch (error: any) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: error.message }));
+    // Verify payment amount matches the selected model's price
+    // amount was already calculated at the beginning based on the model
+    const paidAmount = payment.amount.toString();
+
+    if (paidAmount !== amount) {
+      paymentLogger.error({
+        model: requestedModel,
+        expectedAmount: amount,
+        paidAmount,
+        stage: 'payment_amount_mismatch'
+      }, 'Payment amount does not match selected model price');
+
+      res.writeHead(402, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Payment amount mismatch",
+        details: `Selected model "${requestedModel}" requires ${parseInt(amount) / 1_000_000} USDC, but ${parseInt(paidAmount) / 1_000_000} USDC was paid`,
+        expectedAmount: amount,
+        paidAmount
+      }));
       return;
     }
 
@@ -1375,7 +1525,7 @@ ${contractsSection}
 
 Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
 
-    httpLogger.info({ selectedModel: requestedModel, openRouterModel }, "Sending audit request to OpenRouter");
+    httpLogger.info({ selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter");
 
     // Call OpenRouter API with user-selected model
     interface AuditResponse {
@@ -1389,7 +1539,7 @@ Please perform a complete security audit of the above contracts against the prov
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
-      models: [openRouterModel], // Use single user-selected model
+      models: [openRouterModelId], // Use single user-selected model
       skipValidation: true, // We already validated availability above
     });
 
@@ -1594,14 +1744,22 @@ function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
       get_audit_checklist: {
         path: "/get_audit_checklist",
         method: "POST",
-        price: `${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC`,
-        description: "AI-powered smart contract analysis with OpenRouter",
+        pricing: {
+          DeepSeek: `${parseFloat(TOOL_CONFIG.payments.getAuditChecklist.DeepSeek) / 1_000_000} USDC`,
+          Sonnet: `${parseFloat(TOOL_CONFIG.payments.getAuditChecklist.Sonnet) / 1_000_000} USDC`,
+          Fable: `${parseFloat(TOOL_CONFIG.payments.getAuditChecklist.Fable) / 1_000_000} USDC`,
+        },
+        description: "AI-powered smart contract audit checklist matching (price varies by model)",
       },
       do_audit: {
         path: "/do_audit",
         method: "POST",
-        price: `${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC`,
-        description: "Complete AI-powered security audit report",
+        pricing: {
+          DeepSeek: `${parseFloat(TOOL_CONFIG.payments.doAudit.DeepSeek) / 1_000_000} USDC`,
+          Sonnet: `${parseFloat(TOOL_CONFIG.payments.doAudit.Sonnet) / 1_000_000} USDC`,
+          Fable: `${parseFloat(TOOL_CONFIG.payments.doAudit.Fable) / 1_000_000} USDC`,
+        },
+        description: "Complete AI-powered security audit report (price varies by model)",
       },
     },
     network: network.displayName,
@@ -1679,8 +1837,8 @@ export function startHttpX402Server() {
       endpoints: {
         compile: `POST /mcp/x402-http/compile (${parseFloat(TOOL_CONFIG.payments.compileSolidity) / 1_000_000} USDC)`,
         analyze: `POST /mcp/x402-http/analyze (${parseFloat(TOOL_CONFIG.payments.analyzeWithSlither) / 1_000_000} USDC)`,
-        get_audit_checklist: `POST /mcp/x402-http/get_audit_checklist (${parseFloat(TOOL_CONFIG.payments.getAuditChecklist) / 1_000_000} USDC)`,
-        do_audit: `POST /mcp/x402-http/do_audit (${parseFloat(TOOL_CONFIG.payments.doAudit) / 1_000_000} USDC)`,
+        get_audit_checklist: `POST /mcp/x402-http/get_audit_checklist (DeepSeek: ${parseFloat(TOOL_CONFIG.payments.getAuditChecklist.DeepSeek) / 1_000_000}, Sonnet: ${parseFloat(TOOL_CONFIG.payments.getAuditChecklist.Sonnet) / 1_000_000}, Fable: ${parseFloat(TOOL_CONFIG.payments.getAuditChecklist.Fable) / 1_000_000} USDC)`,
+        do_audit: `POST /mcp/x402-http/do_audit (DeepSeek: ${parseFloat(TOOL_CONFIG.payments.doAudit.DeepSeek) / 1_000_000}, Sonnet: ${parseFloat(TOOL_CONFIG.payments.doAudit.Sonnet) / 1_000_000}, Fable: ${parseFloat(TOOL_CONFIG.payments.doAudit.Fable) / 1_000_000} USDC)`,
         info: 'GET /mcp/x402-http/',
         health: 'GET /mcp/x402-http/health'
       },

@@ -85,8 +85,10 @@ function validateApiKey(): void {
 /**
  * Test OpenRouter API availability with a lightweight request
  * This should be called BEFORE payment settlement to ensure service is available
+ * @param modelId - Optional specific OpenRouter model ID to test (e.g., "anthropic/claude-sonnet-5.5")
+ *                  If not provided, tests with the primary fallback model
  */
-export async function testOpenRouterAvailability(): Promise<boolean> {
+export async function testOpenRouterAvailability(modelId?: string): Promise<boolean> {
   try {
     validateApiKey();
 
@@ -94,10 +96,10 @@ export async function testOpenRouterAvailability(): Promise<boolean> {
       apiKey: process.env.OPENROUTER_API_KEY!
     });
 
-    console.log("🔍 Testing OpenRouter API availability...");
+    // Use specified model or default to primary fallback model
+    const testModel = modelId || OPENROUTER_FALLBACK_MODELS[0].model;
 
-    // Try with the primary model first
-    const testModel = OPENROUTER_FALLBACK_MODELS[0].model;
+    console.log(`🔍 Testing OpenRouter API availability for model: ${testModel}...`);
 
     await Promise.race([
       openrouter.chat.send({
@@ -118,10 +120,11 @@ export async function testOpenRouterAvailability(): Promise<boolean> {
       )
     ]);
 
-    console.log("✅ OpenRouter API is available");
+    console.log(`✅ OpenRouter API is available for model: ${testModel}`);
     return true;
   } catch (error: any) {
-    console.error("❌ OpenRouter API availability test failed:", error.message);
+    const modelName = modelId || OPENROUTER_FALLBACK_MODELS[0].model;
+    console.error(`❌ OpenRouter API availability test failed for model ${modelName}:`, error.message);
     return false;
   }
 }
