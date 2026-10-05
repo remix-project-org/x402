@@ -29,18 +29,24 @@ function validateRequiredEnvVars(): void {
     {
       name: "PAY_TO_ADDRESS",
       description: "Your wallet address to receive payments (e.g., 0x...)"
-    },
+    }
+  ];
+
+  const optional: { name: string; description: string; requiredFor?: string }[] = [
     {
       name: "CDP_API_KEY_ID",
-      description: "Coinbase Developer Platform API Key ID (get from https://portal.cdp.coinbase.com/)"
+      description: "Coinbase Developer Platform API Key ID",
+      requiredFor: "HTTP x402 server with facilitator"
     },
     {
       name: "CDP_API_KEY_SECRET",
-      description: "Coinbase Developer Platform API Secret"
+      description: "Coinbase Developer Platform API Secret",
+      requiredFor: "HTTP x402 server with facilitator"
     },
     {
       name: "OPENROUTER_API_KEY",
-      description: "OpenRouter API key for AI audit endpoints (get from https://openrouter.ai)"
+      description: "OpenRouter API key for AI audit endpoints",
+      requiredFor: "AI-powered audit tools (get_audit_checklist, do_audit)"
     }
   ];
 
@@ -58,15 +64,24 @@ function validateRequiredEnvVars(): void {
     console.error("Please set these variables in your .env file or environment.\n");
     console.error("Example .env file:");
     console.error("  SERVER_BASE_URL=https://api.remix.live/mcp/x402-http");
-    console.error("  PAY_TO_ADDRESS=0xYourWalletAddress");
-    console.error("  CDP_API_KEY_ID=your_cdp_key_id");
-    console.error("  CDP_API_KEY_SECRET=your_cdp_secret");
-    console.error("  OPENROUTER_API_KEY=your_openrouter_key\n");
+    console.error("  PAY_TO_ADDRESS=0xYourWalletAddress\n");
 
     process.exit(1);
   }
 
   serverLogger.info("✅ All required environment variables are set");
+
+  // Log warnings for missing optional variables
+  const missingOptional = optional.filter(({ name }) => !process.env[name]);
+  if (missingOptional.length > 0) {
+    serverLogger.warn("⚠️  Optional environment variables not set:");
+    missingOptional.forEach(({ name, description, requiredFor }) => {
+      serverLogger.warn(`  - ${name}: ${description}`);
+      if (requiredFor) {
+        serverLogger.warn(`    Required for: ${requiredFor}`);
+      }
+    });
+  }
 }
 
 // Validate environment variables before starting servers
