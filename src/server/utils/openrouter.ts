@@ -285,6 +285,33 @@ export async function callOpenRouterWithFallback(
 }
 
 /**
+ * Model name mapping for user-friendly model selection
+ * Maps simple model names to full OpenRouter model identifiers
+ */
+export const MODEL_MAPPINGS = {
+  DeepSeek: "deepseek/deepseek-v4.1-flash",
+  Sonnet: "anthropic/claude-sonnet-5.5",
+  Fable: "anthropic/claude-fable-5"
+} as const;
+
+export type ModelName = keyof typeof MODEL_MAPPINGS;
+
+/**
+ * Convert user-friendly model name to OpenRouter model identifier
+ * @param modelName - User-friendly model name (DeepSeek, Sonnet, or Fable)
+ * @returns OpenRouter model identifier
+ * @throws Error if model name is not valid
+ */
+export function mapModelName(modelName: string): string {
+  if (!(modelName in MODEL_MAPPINGS)) {
+    throw new Error(
+      `Invalid model name: ${modelName}. Must be one of: ${Object.keys(MODEL_MAPPINGS).join(", ")}`
+    );
+  }
+  return MODEL_MAPPINGS[modelName as ModelName];
+}
+
+/**
  * Convenience function for JSON responses
  */
 export async function callOpenRouterJSON<T = any>(

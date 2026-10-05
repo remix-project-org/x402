@@ -27,7 +27,8 @@ import {
 } from "./utils/audit-checklist.js";
 import {
   testOpenRouterAvailability,
-  callOpenRouterJSON
+  callOpenRouterJSON,
+  mapModelName
 } from "./utils/openrouter.js";
 import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVerification, logResponseSent } from "./utils/logger.js";
 
@@ -964,11 +965,27 @@ contract MyToken {
 
     // Payment verified - process audit checklist request
     const body = await parseBody(req);
-    const { sources, maxCategories = 12 } = body;
+    const { sources, maxCategories = 12, model: requestedModel } = body;
 
     if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Missing required field: sources. At least one contract file is required." }));
+      return;
+    }
+
+    if (!requestedModel || typeof requestedModel !== 'string') {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable" }));
+      return;
+    }
+
+    // Validate and map model name to OpenRouter model identifier
+    let openRouterModel: string;
+    try {
+      openRouterModel = mapModelName(requestedModel);
+    } catch (error: any) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: error.message }));
       return;
     }
 
@@ -1035,15 +1052,15 @@ Return a JSON object with this structure:
   "skipped_reason": "optional explanation if no matches"
 }`;
 
-    httpLogger.info("Sending audit matching request to OpenRouter with fallback support");
+    httpLogger.info({ selectedModel: requestedModel, openRouterModel }, "Sending audit matching request to OpenRouter");
 
-    // Call OpenRouter API with fallback and retry logic
+    // Call OpenRouter API with user-selected model
     const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
       systemMessage,
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
-      models: TOOL_CONFIG.openRouter.fallbackModels,
+      models: [openRouterModel], // Use single user-selected model
       skipValidation: true, // We already validated availability above
     });
 
@@ -1255,7 +1272,7 @@ contract MyToken {
 
     // Payment verified - process audit request
     const body = await parseBody(req);
-    const { sources, checklist } = body;
+    const { sources, checklist, model: requestedModel } = body;
 
     if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -1266,6 +1283,22 @@ contract MyToken {
     if (!checklist || typeof checklist !== 'string') {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Missing required field: checklist. Provide audit checklist in markdown format." }));
+      return;
+    }
+
+    if (!requestedModel || typeof requestedModel !== 'string') {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable" }));
+      return;
+    }
+
+    // Validate and map model name to OpenRouter model identifier
+    let openRouterModel: string;
+    try {
+      openRouterModel = mapModelName(requestedModel);
+    } catch (error: any) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: error.message }));
       return;
     }
 
@@ -1342,9 +1375,9 @@ ${contractsSection}
 
 Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
 
-    httpLogger.info("Sending audit request to OpenRouter with fallback support");
+    httpLogger.info({ selectedModel: requestedModel, openRouterModel }, "Sending audit request to OpenRouter");
 
-    // Call OpenRouter API with fallback and retry logic
+    // Call OpenRouter API with user-selected model
     interface AuditResponse {
       findings: any[];
       summary: string;
@@ -1356,7 +1389,7 @@ Please perform a complete security audit of the above contracts against the prov
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
-      models: TOOL_CONFIG.openRouter.fallbackModels,
+      models: [openRouterModel], // Use single user-selected model
       skipValidation: true, // We already validated availability above
     });
 
