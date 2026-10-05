@@ -133,9 +133,28 @@ Optional (for HTTP x402 server with CDP Facilitator):
 - `CDP_API_KEY_ID` - CDP API key for facilitator service
 - `CDP_API_KEY_SECRET` - CDP API secret
 
+Optional (for logging):
+- `LOG_LEVEL` - Set log verbosity: `debug`, `info`, `warn`, `error` (default: `debug` in dev, `info` in production)
+
 > **Detailed configuration guides:**
 > - HTTP x402 Server: See [HTTP_X402_USAGE.md](HTTP_X402_USAGE.md) for facilitator configuration
 > - MCP Server: See [MCP_USAGE.md](MCP_USAGE.md) for wallet setup
+
+### Logging
+
+The server uses structured logging with [pino](https://github.com/pinojs/pino) for comprehensive audit trails:
+
+**Log Levels:**
+- `debug` - Detailed debugging information (default in development)
+- `info` - General operational information (default in production)
+- `warn` - Warning messages
+- `error` - Error conditions
+
+**Usage:**
+```bash
+# Set log level
+LOG_LEVEL=debug yarn start
+```
 
 ## Building
 
