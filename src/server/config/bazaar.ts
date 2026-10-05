@@ -324,6 +324,11 @@ export const GET_AUDIT_CHECKLIST_METADATA = {
                   required: ["content"]
                 }
               },
+              model: {
+                type: "string",
+                enum: ["DeepSeek", "Sonnet", "Fable"],
+                description: "AI model to use for analysis. Required. DeepSeek: fast and cost-effective, Sonnet: high quality, Fable: balanced performance"
+              },
               maxCategories: {
                 type: "number",
                 description: "Maximum number of audit categories to match (default: 12, max: 20)",
@@ -331,7 +336,7 @@ export const GET_AUDIT_CHECKLIST_METADATA = {
                 maximum: 20
               }
             },
-            required: ["sources"]
+            required: ["sources", "model"]
           },
           example: {
             sources: {
@@ -349,6 +354,7 @@ contract MyToken {
 }`
               }
             },
+            model: "DeepSeek",
             maxCategories: 12
           }
         },
@@ -413,9 +419,14 @@ export const DO_AUDIT_METADATA = {
               checklist: {
                 type: "string",
                 description: "Audit checklist in markdown format (from get_audit_checklist endpoint or custom checklist)"
+              },
+              model: {
+                type: "string",
+                enum: ["DeepSeek", "Sonnet", "Fable"],
+                description: "AI model to use for analysis. Required. DeepSeek: fast and cost-effective, Sonnet: high quality, Fable: balanced performance"
               }
             },
-            required: ["sources", "checklist"]
+            required: ["sources", "checklist", "model"]
           },
           example: {
             sources: {
@@ -433,7 +444,8 @@ contract MyToken {
 }`
               }
             },
-            checklist: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n..."
+            checklist: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n...",
+            model: "Sonnet"
           }
         },
         output: {
