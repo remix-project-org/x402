@@ -846,80 +846,92 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
   // Use metadata description which includes pricing info
   const description = GET_AUDIT_CHECKLIST_METADATA.description;
 
-  // Parse request body FIRST to get the model parameter
-  // This allows us to return the correct price in the 402 response
+  // Parse request body to get the model parameter
+  // But delay validation until after payment check (x402 compliance)
   const body = await parseBody(req);
   const { model: requestedModel } = body;
 
-  // Validate model parameter is provided
-  if (!requestedModel || typeof requestedModel !== 'string') {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable",
-      hint: "The model parameter determines the price. DeepSeek: $0.05, Sonnet: $0.15, Fable: $0.30"
-    }));
-    return;
+  // For x402 compliance: Check payment BEFORE validating request parameters
+  // We'll use the model if provided, or default to DeepSeek for the 402 response
+  const paymentSignature = req.headers["payment-signature"] as string;
+
+  // If no payment, use provided model for pricing (or default to DeepSeek)
+  // Model validation will happen after payment verification
+  let modelForPricing: "DeepSeek" | "Sonnet" | "Fable" = "DeepSeek";
+  if (requestedModel && ['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
+    modelForPricing = requestedModel as "DeepSeek" | "Sonnet" | "Fable";
   }
 
-  // Validate model is one of the allowed values
-  if (!['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: `Invalid model: ${requestedModel}. Must be one of: DeepSeek, Sonnet, Fable`,
-      pricing: {
-        DeepSeek: "$0.05 USDC",
-        Sonnet: "$0.15 USDC",
-        Fable: "$0.30 USDC"
-      }
-    }));
-    return;
-  }
-
-  // CRITICAL: Test OpenRouter availability BEFORE calculating price or accepting payment
-  // This ensures we never ask for payment if the selected model is unavailable
-  let openRouterModelId: string;
-  try {
-    openRouterModelId = mapModelName(requestedModel);
-  } catch (error: any) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: error.message }));
-    return;
-  }
-
-  // CRITICAL: Test if at least one model in the fallback chain is available
-  // The primary model or any of its 3 fallbacks being available is sufficient
-  httpLogger.info({
-    endpoint: '/get_audit_checklist',
-    requestedModel,
-    openRouterModelId
-  }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
-
-  try {
-    const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
-
-    if (!isAnyModelAvailable) {
-      // If primary model fails, this is expected - fallbacks will be tried after payment
-      // We only log this as info, not an error
-      httpLogger.info({
-        requestedModel,
-        openRouterModelId
-      }, "Primary model not available, will try fallbacks after payment");
-    } else {
-      httpLogger.info({
-        requestedModel,
-        openRouterModelId
-      }, "Primary model is available");
+  // If payment provided, validate model NOW
+  if (paymentSignature) {
+    // Validate model parameter is provided
+    if (!requestedModel || typeof requestedModel !== 'string') {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable",
+        hint: "The model parameter determines the price. DeepSeek: $0.05, Sonnet: $0.15, Fable: $0.30"
+      }));
+      return;
     }
-  } catch (availError: any) {
-    // Availability check failure is not fatal - we'll try the model chain after payment
-    httpLogger.warn({
-      error: availError.message,
-      requestedModel
-    }, "Availability check failed, will proceed with payment and try model chain");
+
+    // Validate model is one of the allowed values
+    if (!['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: `Invalid model: ${requestedModel}. Must be one of: DeepSeek, Sonnet, Fable`,
+        pricing: {
+          DeepSeek: "$0.05 USDC",
+          Sonnet: "$0.15 USDC",
+          Fable: "$0.30 USDC"
+        }
+      }));
+      return;
+    }
   }
 
-  // Get the correct amount based on selected model
-  const amount = getAuditChecklistPrice(requestedModel as "DeepSeek" | "Sonnet" | "Fable");
+  // Skip OpenRouter availability check if no payment yet (for 402 response)
+  // Only validate after payment is confirmed
+  let openRouterModelId: string | undefined;
+  if (paymentSignature) {
+    // Payment provided - validate OpenRouter availability
+    try {
+      openRouterModelId = mapModelName(requestedModel);
+    } catch (error: any) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: error.message }));
+      return;
+    }
+
+    httpLogger.info({
+      endpoint: '/get_audit_checklist',
+      requestedModel,
+      openRouterModelId
+    }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
+
+    try {
+      const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
+
+      if (!isAnyModelAvailable) {
+        httpLogger.info({
+          requestedModel,
+          openRouterModelId
+        }, "Primary model not available, will try fallbacks after payment");
+      } else {
+        httpLogger.info({
+          requestedModel,
+          openRouterModelId
+        }, "Primary model is available");
+      }
+    } catch (availError: any) {
+      httpLogger.warn({
+        error: availError.message,
+        requestedModel
+      }, "Availability check failed, will proceed with payment and try model chain");
+    }
+  }
+
+  // Get the correct amount based on selected model (or default for 402 response)
+  const amount = getAuditChecklistPrice(modelForPricing);
 
   httpLogger.info({
     endpoint: '/get_audit_checklist',
@@ -994,12 +1006,9 @@ contract MyToken {
 
   const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
 
-  // Check for payment signature
-  const paymentSignature = req.headers["payment-signature"] as string;
-
+  // Payment signature was already checked above
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
-    // We already verified the model is available above, so it's safe to ask for payment
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
@@ -1067,6 +1076,11 @@ contract MyToken {
       contractFiles: Object.keys(sources),
       maxCategories
     }, "Processing audit checklist request");
+
+    // At this point, openRouterModelId must be defined (validated above)
+    if (!openRouterModelId) {
+      throw new Error("openRouterModelId should have been validated after payment");
+    }
 
     // Load and prepare the audit checklist
     const checklist = loadAuditChecklist();
@@ -1212,80 +1226,89 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
   // Use metadata description which includes pricing info
   const description = DO_AUDIT_METADATA.description;
 
-  // Parse request body FIRST to get the model parameter
-  // This allows us to return the correct price in the 402 response
+  // Parse request body to get the model parameter
+  // But delay validation until after payment check (x402 compliance)
   const body = await parseBody(req);
   const { model: requestedModel } = body;
 
-  // Validate model parameter is provided
-  if (!requestedModel || typeof requestedModel !== 'string') {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable",
-      hint: "The model parameter determines the price. DeepSeek: $0.15, Sonnet: $0.25, Fable: $0.70"
-    }));
-    return;
+  // For x402 compliance: Check payment BEFORE validating request parameters
+  const paymentSignature = req.headers["payment-signature"] as string;
+
+  // If no payment, use provided model for pricing (or default to DeepSeek)
+  let modelForPricing: "DeepSeek" | "Sonnet" | "Fable" = "DeepSeek";
+  if (requestedModel && ['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
+    modelForPricing = requestedModel as "DeepSeek" | "Sonnet" | "Fable";
   }
 
-  // Validate model is one of the allowed values
-  if (!['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: `Invalid model: ${requestedModel}. Must be one of: DeepSeek, Sonnet, Fable`,
-      pricing: {
-        DeepSeek: "$0.15 USDC",
-        Sonnet: "$0.25 USDC",
-        Fable: "$0.70 USDC"
-      }
-    }));
-    return;
-  }
-
-  // CRITICAL: Test OpenRouter availability BEFORE calculating price or accepting payment
-  // This ensures we never ask for payment if the selected model is unavailable
-  let openRouterModelId: string;
-  try {
-    openRouterModelId = mapModelName(requestedModel);
-  } catch (error: any) {
-    res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: error.message }));
-    return;
-  }
-
-  // CRITICAL: Test if at least one model in the fallback chain is available
-  // The primary model or any of its 3 fallbacks being available is sufficient
-  httpLogger.info({
-    endpoint: '/do_audit',
-    requestedModel,
-    openRouterModelId
-  }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
-
-  try {
-    const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
-
-    if (!isAnyModelAvailable) {
-      // If primary model fails, this is expected - fallbacks will be tried after payment
-      // We only log this as info, not an error
-      httpLogger.info({
-        requestedModel,
-        openRouterModelId
-      }, "Primary model not available, will try fallbacks after payment");
-    } else {
-      httpLogger.info({
-        requestedModel,
-        openRouterModelId
-      }, "Primary model is available");
+  // If payment provided, validate model NOW
+  if (paymentSignature) {
+    // Validate model parameter is provided
+    if (!requestedModel || typeof requestedModel !== 'string') {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Missing required field: model. Must be one of: DeepSeek, Sonnet, Fable",
+        hint: "The model parameter determines the price. DeepSeek: $0.15, Sonnet: $0.25, Fable: $0.70"
+      }));
+      return;
     }
-  } catch (availError: any) {
-    // Availability check failure is not fatal - we'll try the model chain after payment
-    httpLogger.warn({
-      error: availError.message,
-      requestedModel
-    }, "Availability check failed, will proceed with payment and try model chain");
+
+    // Validate model is one of the allowed values
+    if (!['DeepSeek', 'Sonnet', 'Fable'].includes(requestedModel)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: `Invalid model: ${requestedModel}. Must be one of: DeepSeek, Sonnet, Fable`,
+        pricing: {
+          DeepSeek: "$0.15 USDC",
+          Sonnet: "$0.25 USDC",
+          Fable: "$0.70 USDC"
+        }
+      }));
+      return;
+    }
   }
 
-  // Get the correct amount based on selected model
-  const amount = getDoAuditPrice(requestedModel as "DeepSeek" | "Sonnet" | "Fable");
+  // Skip OpenRouter availability check if no payment yet (for 402 response)
+  let openRouterModelId: string | undefined;
+  if (paymentSignature) {
+    // Payment provided - validate OpenRouter availability
+    try {
+      openRouterModelId = mapModelName(requestedModel);
+    } catch (error: any) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: error.message }));
+      return;
+    }
+
+    httpLogger.info({
+      endpoint: '/do_audit',
+      requestedModel,
+      openRouterModelId
+    }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
+
+    try {
+      const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
+
+      if (!isAnyModelAvailable) {
+        httpLogger.info({
+          requestedModel,
+          openRouterModelId
+        }, "Primary model not available, will try fallbacks after payment");
+      } else {
+        httpLogger.info({
+          requestedModel,
+          openRouterModelId
+        }, "Primary model is available");
+      }
+    } catch (availError: any) {
+      httpLogger.warn({
+        error: availError.message,
+        requestedModel
+      }, "Availability check failed, will proceed with payment and try model chain");
+    }
+  }
+
+  // Get the correct amount based on selected model (or default for 402 response)
+  const amount = getDoAuditPrice(modelForPricing);
 
   httpLogger.info({
     endpoint: '/do_audit',
@@ -1365,12 +1388,9 @@ contract MyToken {
 
   const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
 
-  // Check for payment signature
-  const paymentSignature = req.headers["payment-signature"] as string;
-
+  // Payment signature was already checked above
   if (!paymentSignature) {
     // No payment - return 402 with v2 payment requirements
-    // We already verified the model is available above, so it's safe to ask for payment
     res.writeHead(402, {
       "Content-Type": "application/json",
       "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
@@ -1444,6 +1464,11 @@ contract MyToken {
       contractFiles: Object.keys(sources),
       checklistLength: checklist.length
     }, "Processing complete audit request");
+
+    // At this point, openRouterModelId must be defined (validated above)
+    if (!openRouterModelId) {
+      throw new Error("openRouterModelId should have been validated after payment");
+    }
 
     // Build contract sources section
     let contractsSection = '';
