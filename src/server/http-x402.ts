@@ -886,47 +886,36 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
     return;
   }
 
+  // CRITICAL: Test if at least one model in the fallback chain is available
+  // The primary model or any of its 3 fallbacks being available is sufficient
   httpLogger.info({
     endpoint: '/get_audit_checklist',
     requestedModel,
     openRouterModelId
-  }, "Pre-request validation: Testing OpenRouter availability for selected model");
+  }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
 
   try {
-    const isOpenRouterAvailable = await testOpenRouterAvailability(openRouterModelId);
+    const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
 
-    if (!isOpenRouterAvailable) {
-      httpLogger.error({
+    if (!isAnyModelAvailable) {
+      // If primary model fails, this is expected - fallbacks will be tried after payment
+      // We only log this as info, not an error
+      httpLogger.info({
         requestedModel,
         openRouterModelId
-      }, "Selected model is not available - rejecting request");
-      res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: "Service temporarily unavailable",
-        details: `The selected model "${requestedModel}" (${openRouterModelId}) is not responding. Please try again later or select a different model.`,
+      }, "Primary model not available, will try fallbacks after payment");
+    } else {
+      httpLogger.info({
         requestedModel,
-        availableModels: ["DeepSeek", "Sonnet", "Fable"]
-      }));
-      return;
+        openRouterModelId
+      }, "Primary model is available");
     }
-
-    httpLogger.info({
-      requestedModel,
-      openRouterModelId
-    }, "OpenRouter availability confirmed for selected model");
   } catch (availError: any) {
-    logError(httpLogger, availError, {
-      context: 'OpenRouter pre-request availability check',
-      endpoint: '/get_audit_checklist',
+    // Availability check failure is not fatal - we'll try the model chain after payment
+    httpLogger.warn({
+      error: availError.message,
       requestedModel
-    });
-    res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Service temporarily unavailable",
-      details: "Unable to verify service availability. Please try again later.",
-      requestedModel
-    }));
-    return;
+    }, "Availability check failed, will proceed with payment and try model chain");
   }
 
   // Get the correct amount based on selected model
@@ -1044,7 +1033,7 @@ contract MyToken {
 
     // Verify payment amount matches the selected model's price
     // amount was already calculated at the beginning based on the model
-    const paidAmount = payment.amount.toString();
+    const paidAmount = payment.payload?.authorization?.value?.toString() || "0";
 
     if (paidAmount !== amount) {
       paymentLogger.error({
@@ -1263,47 +1252,36 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
+  // CRITICAL: Test if at least one model in the fallback chain is available
+  // The primary model or any of its 3 fallbacks being available is sufficient
   httpLogger.info({
     endpoint: '/do_audit',
     requestedModel,
     openRouterModelId
-  }, "Pre-request validation: Testing OpenRouter availability for selected model");
+  }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
 
   try {
-    const isOpenRouterAvailable = await testOpenRouterAvailability(openRouterModelId);
+    const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
 
-    if (!isOpenRouterAvailable) {
-      httpLogger.error({
+    if (!isAnyModelAvailable) {
+      // If primary model fails, this is expected - fallbacks will be tried after payment
+      // We only log this as info, not an error
+      httpLogger.info({
         requestedModel,
         openRouterModelId
-      }, "Selected model is not available - rejecting request");
-      res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        error: "Service temporarily unavailable",
-        details: `The selected model "${requestedModel}" (${openRouterModelId}) is not responding. Please try again later or select a different model.`,
+      }, "Primary model not available, will try fallbacks after payment");
+    } else {
+      httpLogger.info({
         requestedModel,
-        availableModels: ["DeepSeek", "Sonnet", "Fable"]
-      }));
-      return;
+        openRouterModelId
+      }, "Primary model is available");
     }
-
-    httpLogger.info({
-      requestedModel,
-      openRouterModelId
-    }, "OpenRouter availability confirmed for selected model");
   } catch (availError: any) {
-    logError(httpLogger, availError, {
-      context: 'OpenRouter pre-request availability check',
-      endpoint: '/do_audit',
+    // Availability check failure is not fatal - we'll try the model chain after payment
+    httpLogger.warn({
+      error: availError.message,
       requestedModel
-    });
-    res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
-      error: "Service temporarily unavailable",
-      details: "Unable to verify service availability. Please try again later.",
-      requestedModel
-    }));
-    return;
+    }, "Availability check failed, will proceed with payment and try model chain");
   }
 
   // Get the correct amount based on selected model
@@ -1432,7 +1410,7 @@ contract MyToken {
 
     // Verify payment amount matches the selected model's price
     // amount was already calculated at the beginning based on the model
-    const paidAmount = payment.amount.toString();
+    const paidAmount = payment.payload?.authorization?.value?.toString() || "0";
 
     if (paidAmount !== amount) {
       paymentLogger.error({
