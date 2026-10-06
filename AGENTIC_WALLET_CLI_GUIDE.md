@@ -48,13 +48,13 @@ Scheme: exact
 ---
 https://api.remix.live/mcp/x402-http/get_audit_checklist
 Get a customized security audit checklist based on contract structure and patterns
-Price: 0.05 USDC
+Price: 0.05-0.30 USDC (DeepSeek/Sonnet/Fable)
 Network: eip155:8453
 Scheme: exact
 ---
 https://api.remix.live/mcp/x402-http/do_audit
 Perform a comprehensive AI-powered security audit with detailed findings and severity levels
-Price: 0.10 USDC
+Price: 0.15-0.70 USDC (DeepSeek/Sonnet/Fable)
 Network: eip155:8453
 Scheme: exact
 ---
@@ -72,12 +72,12 @@ Run Slither security analysis on smart contracts
 
 ### POST /get_audit_checklist
 Get a customized security audit checklist based on contract structure and patterns
-- **Price**: 0.05 USDC
+- **Price**: 0.05-0.30 USDC (by model: DeepSeek/Sonnet/Fable)
 - **Endpoint**: `https://api.remix.live/mcp/x402-http/get_audit_checklist`
 
 ### POST /do_audit
 Perform a comprehensive AI-powered security audit with detailed findings and severity levels
-- **Price**: 0.10 USDC
+- **Price**: 0.15-0.70 USDC (by model: DeepSeek/Sonnet/Fable)
 - **Endpoint**: `https://api.remix.live/mcp/x402-http/do_audit`
 
 ## Quick Start
@@ -140,6 +140,7 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/analyze" \
 npx awal x402 pay "https://api.remix.live/mcp/x402-http/get_audit_checklist" \
   --method POST \
   --data '{
+    "model": "DeepSeek",
     "sources": {
       "ExampleToken.sol": {
         "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"@openzeppelin/contracts/token/ERC20/ERC20.sol\";\nimport \"@openzeppelin/contracts/access/Ownable.sol\";\n\ncontract ExampleToken is ERC20, Ownable {\n    uint256 public maxSupply = 1000000 * 10**18;\n    \n    constructor() ERC20(\"Example Token\", \"EXMP\") Ownable(msg.sender) {\n        _mint(msg.sender, 100000 * 10**18);\n    }\n    \n    function mint(address to, uint256 amount) external onlyOwner {\n        require(totalSupply() + amount <= maxSupply, \"Exceeds max supply\");\n        _mint(to, amount);\n    }\n}"
@@ -149,12 +150,15 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/get_audit_checklist" \
   }'
 ```
 
+**Note**: Use `"model": "DeepSeek"` (0.05 USDC), `"Sonnet"` (0.15 USDC), or `"Fable"` (0.30 USDC) to select the AI model.
+
 #### Perform Complete Audit
 
 ```bash
 npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
   --method POST \
   --data '{
+    "model": "DeepSeek",
     "sources": {
       "ExampleToken.sol": {
         "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"@openzeppelin/contracts/token/ERC20/ERC20.sol\";\nimport \"@openzeppelin/contracts/access/Ownable.sol\";\n\ncontract ExampleToken is ERC20, Ownable {\n    uint256 public maxSupply = 1000000 * 10**18;\n    mapping(address => bool) public blacklisted;\n    \n    constructor() ERC20(\"Example Token\", \"EXMP\") Ownable(msg.sender) {\n        _mint(msg.sender, 100000 * 10**18);\n    }\n    \n    function mint(address to, uint256 amount) external onlyOwner {\n        require(totalSupply() + amount <= maxSupply, \"Exceeds max supply\");\n        require(!blacklisted[to], \"Address is blacklisted\");\n        _mint(to, amount);\n    }\n    \n    function blacklist(address account) external onlyOwner {\n        blacklisted[account] = true;\n    }\n    \n    function _update(address from, address to, uint256 value) internal virtual override {\n        require(!blacklisted[from] && !blacklisted[to], \"Blacklisted address\");\n        super._update(from, to, value);\n    }\n}"
@@ -164,6 +168,8 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
   }'
 ```
 
+**Note**: Use `"model": "DeepSeek"` (0.15 USDC), `"Sonnet"` (0.25 USDC), or `"Fable"` (0.70 USDC) to select the AI model.
+
 ## Key Information
 
 ### Pricing
@@ -171,8 +177,13 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
 |---------|------|----------|
 | Compile | 0.01 USDC | $0 (facilitator pays) |
 | Analyze | 0.02 USDC | $0 (facilitator pays) |
-| Get Audit Checklist | 0.05 USDC | $0 (facilitator pays) |
-| Do Audit | 0.10 USDC | $0 (facilitator pays) |
+| Get Audit Checklist | 0.05-0.30 USDC (by model) | $0 (facilitator pays) |
+| Do Audit | 0.15-0.70 USDC (by model) | $0 (facilitator pays) |
+
+**Audit Model Pricing:**
+- **DeepSeek** (Budget): Checklist 0.05 + Audit 0.15 = 0.20 USDC total
+- **Sonnet** (Premium): Checklist 0.15 + Audit 0.25 = 0.40 USDC total
+- **Fable** (Ultra): Checklist 0.30 + Audit 0.70 = 1.00 USDC total
 
 ### Networks
 - **Base Mainnet**: Chain ID `eip155:8453`

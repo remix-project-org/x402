@@ -301,7 +301,7 @@ Claude will:
 
 ### Get Audit Checklist
 
-**Cost**: $0.05 USDC per checklist
+**Cost**: $0.05-0.30 USDC per checklist (by model: DeepSeek/Sonnet/Fable)
 
 Get a customized security audit checklist tailored to your contract's structure and patterns.
 
@@ -333,8 +333,13 @@ contract ExampleToken is ERC20, Ownable {
 Claude will:
 1. Analyze your contract structure
 2. Generate relevant security checklist items
-3. Pay $0.05 USDC automatically
+3. Pay $0.05 USDC (DeepSeek), $0.15 (Sonnet), or $0.30 (Fable) automatically
 4. Return a customized checklist in markdown format
+
+**Model Options:**
+- **DeepSeek** (Budget): $0.05 USDC - Fast and cost-effective
+- **Sonnet** (Premium): $0.15 USDC - High quality analysis
+- **Fable** (Ultra): $0.30 USDC - Premium deep analysis
 
 **Response includes:**
 - Relevant security categories based on contract patterns
@@ -344,7 +349,7 @@ Claude will:
 
 ### Perform Complete Security Audit
 
-**Cost**: $0.10 USDC per audit
+**Cost**: $0.15-0.70 USDC per audit (by model: DeepSeek/Sonnet/Fable)
 
 Get a comprehensive AI-powered security audit with detailed findings, severity levels, and remediation recommendations.
 
@@ -387,8 +392,13 @@ contract ExampleToken is ERC20, Ownable {
 Claude will:
 1. Generate a customized audit checklist (or use one you provide)
 2. Perform deep AI-powered security analysis
-3. Pay $0.10 USDC automatically
+3. Pay $0.15 USDC (DeepSeek), $0.25 (Sonnet), or $0.70 (Fable) automatically
 4. Return a comprehensive audit report with findings
+
+**Model Options:**
+- **DeepSeek** (Budget): $0.15 USDC - Fast and cost-effective
+- **Sonnet** (Premium): $0.25 USDC - High quality analysis
+- **Fable** (Ultra): $0.70 USDC - Premium deep analysis
 
 **Response includes:**
 - Total number of findings
@@ -411,9 +421,11 @@ You can combine both endpoints for a complete workflow:
 ```
 
 This two-step approach:
-- First generates a tailored checklist ($0.05 USDC)
-- Then runs comprehensive audit with that checklist ($0.10 USDC)
-- Total cost: $0.15 USDC
+- First generates a tailored checklist ($0.05-0.30 USDC by model)
+- Then runs comprehensive audit with that checklist ($0.15-0.70 USDC by model)
+- Total cost with **DeepSeek**: $0.20 USDC (0.05 + 0.15)
+- Total cost with **Sonnet**: $0.40 USDC (0.15 + 0.25)
+- Total cost with **Fable**: $1.00 USDC (0.30 + 0.70)
 
 
 ## Wallet Management
@@ -511,8 +523,8 @@ Please:
 |---------|----------|------|-------------|
 | Compile | api.remix.live/mcp/x402-http/compile | $0.01 USDC | Solidity compilation |
 | Analyze | api.remix.live/mcp/x402-http/analyze | $0.02 USDC | Slither security analysis |
-| Get Audit Checklist | api.remix.live/mcp/x402-http/get_audit_checklist | $0.05 USDC | Customized security checklist |
-| Do Audit | api.remix.live/mcp/x402-http/do_audit | $0.10 USDC | Comprehensive AI security audit |
+| Get Audit Checklist | api.remix.live/mcp/x402-http/get_audit_checklist | $0.05-0.30 USDC (by model) | Customized security checklist (DeepSeek/Sonnet/Fable) |
+| Do Audit | api.remix.live/mcp/x402-http/do_audit | $0.15-0.70 USDC (by model) | Comprehensive AI security audit (DeepSeek/Sonnet/Fable) |
 
 **Note**: No gas fees! Payments use the facilitator model where gas is covered by the service.
 

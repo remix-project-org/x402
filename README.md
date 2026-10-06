@@ -70,8 +70,8 @@ This is a **multi-protocol server implementation** that provides paid Solidity d
 2. **analyze_with_slither** - Security analysis with Slither (0.02 USDC)
 
 **HTTP x402 Only:**
-3. **get_audit_checklist** - AI-powered audit checklist generation (0.05 USDC)
-4. **do_audit** - Complete security audit report with AI (0.10 USDC)
+3. **get_audit_checklist** - AI-powered audit checklist generation (0.05-0.30 USDC by model)
+4. **do_audit** - Complete security audit report with AI (0.15-0.70 USDC by model)
 
 **MCP Only:**
 5. **compile_and_deploy** - Single network deployment (dynamic pricing)

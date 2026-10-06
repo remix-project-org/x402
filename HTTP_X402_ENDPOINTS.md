@@ -286,13 +286,17 @@ Run Slither security analysis with x402 payment.
 
 Generate AI-powered audit checklist for smart contracts with x402 payment.
 
-**Price**: 0.05 USDC
+**Pricing (by model)**:
+- **DeepSeek** (Budget): 0.05 USDC - Fast and cost-effective
+- **Sonnet** (Premium): 0.15 USDC - High quality analysis
+- **Fable** (Ultra): 0.30 USDC - Premium deep analysis
 
-**Description**: Uses OpenRouter AI to analyze smart contracts and match them against a comprehensive security audit checklist. Returns relevant security categories in markdown format.
+**Description**: Uses OpenRouter AI to analyze smart contracts and match them against a comprehensive security audit checklist. Returns relevant security categories in markdown format. Supports 3 AI models with automatic fallbacks for reliability.
 
 **Request Body**:
 ```json
 {
+  "model": "DeepSeek",
   "sources": {
     "MyToken.sol": {
       "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract MyToken {\n    string public name = \"MyToken\";\n    mapping(address => uint256) public balances;\n\n    function mint(address to, uint256 amount) public {\n        balances[to] += amount;\n    }\n}"
@@ -303,6 +307,7 @@ Generate AI-powered audit checklist for smart contracts with x402 payment.
 ```
 
 **Request Parameters**:
+- `model` (required): AI model to use - "DeepSeek", "Sonnet", or "Fable"
 - `sources` (required): Map of filename to source code (same format as `/compile`)
 - `maxCategories` (optional): Maximum number of audit categories to match (default: 12, max: 20)
 
@@ -328,13 +333,17 @@ Generate AI-powered audit checklist for smart contracts with x402 payment.
 
 Perform complete AI-powered security audit with detailed findings and recommendations.
 
-**Price**: 0.10 USDC
+**Pricing (by model)**:
+- **DeepSeek** (Budget): 0.15 USDC - Fast and cost-effective
+- **Sonnet** (Premium): 0.25 USDC - High quality analysis
+- **Fable** (Ultra): 0.70 USDC - Premium deep analysis
 
-**Description**: Takes smart contract sources and an audit checklist (from `/get_audit_checklist` or custom), analyzes the code against all checklist items, and generates a comprehensive security audit report with severity-classified findings.
+**Description**: Takes smart contract sources and an audit checklist (from `/get_audit_checklist` or custom), analyzes the code against all checklist items, and generates a comprehensive security audit report with severity-classified findings. Supports 3 AI models with automatic fallbacks for reliability.
 
 **Request Body**:
 ```json
 {
+  "model": "DeepSeek",
   "sources": {
     "MyToken.sol": {
       "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ncontract MyToken {\n    string public name = \"MyToken\";\n    mapping(address => uint256) public balances;\n\n    function mint(address to, uint256 amount) public {\n        balances[to] += amount;\n    }\n}"
@@ -345,6 +354,7 @@ Perform complete AI-powered security audit with detailed findings and recommenda
 ```
 
 **Request Parameters**:
+- `model` (required): AI model to use - "DeepSeek", "Sonnet", or "Fable"
 - `sources` (required): Map of filename to source code
 - `checklist` (required): Audit checklist in markdown format (typically from `/get_audit_checklist`)
 
@@ -381,21 +391,23 @@ Perform complete AI-powered security audit with detailed findings and recommenda
 
 **Complete Workflow Example**:
 ```bash
-# Step 1: Get audit checklist (0.05 USDC)
+# Step 1: Get audit checklist with DeepSeek (0.05 USDC)
 curl -X POST http://localhost:8002/get_audit_checklist \
   -H "Content-Type: application/json" \
   -H "Payment-Signature: <payment1>" \
-  -d '{"sources": {"MyToken.sol": {"content": "..."}}}' \
+  -d '{"model": "DeepSeek", "sources": {"MyToken.sol": {"content": "..."}}}' \
   > checklist.json
 
-# Step 2: Run full audit with checklist (0.10 USDC)
+# Step 2: Run full audit with checklist using DeepSeek (0.15 USDC)
 curl -X POST http://localhost:8002/do_audit \
   -H "Content-Type: application/json" \
   -H "Payment-Signature: <payment2>" \
-  -d "{\"sources\": {\"MyToken.sol\": {\"content\": \"...\"}}, \"checklist\": \"$(cat checklist.json | jq -r .markdown)\"}" \
+  -d "{\"model\": \"DeepSeek\", \"sources\": {\"MyToken.sol\": {\"content\": \"...\"}}, \"checklist\": \"$(cat checklist.json | jq -r .markdown)\"}" \
   > audit_report.json
 
-# Total cost: 0.15 USDC
+# Total cost with DeepSeek: 0.20 USDC
+# Total cost with Sonnet: 0.40 USDC (0.15 + 0.25)
+# Total cost with Fable: 1.00 USDC (0.30 + 0.70)
 ```
 
 ### GET /info
@@ -424,14 +436,14 @@ Get service information (no payment required).
     "get_audit_checklist": {
       "path": "/get_audit_checklist",
       "method": "POST",
-      "price": "0.05 USDC",
-      "description": "AI-powered smart contract analysis with OpenRouter"
+      "price": "0.05-0.30 USDC (by model)",
+      "description": "AI-powered smart contract analysis with OpenRouter (DeepSeek/Sonnet/Fable)"
     },
     "do_audit": {
       "path": "/do_audit",
       "method": "POST",
-      "price": "0.1 USDC",
-      "description": "Complete AI-powered security audit report"
+      "price": "0.15-0.70 USDC (by model)",
+      "description": "Complete AI-powered security audit report (DeepSeek/Sonnet/Fable)"
     }
   },
   "network": "Base Sepolia Testnet",
