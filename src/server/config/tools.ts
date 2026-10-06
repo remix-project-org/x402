@@ -34,18 +34,6 @@ export const TOOL_CONFIG = {
 
   // OpenRouter Configuration
   openRouter: {
-    apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-    model: "deepseek/deepseek-v4.1-flash", // Primary model (fast and cost-effective)
-    maxTokens: 2000,
-    // Fallback models for reliability (tried in order if primary fails)
-    fallbackModels: [
-      "anthropic/claude-sonnet-5.5",    // Latest Sonnet model, high quality and reliable
-      "openai/gpt-4o",                  // Excellent for code analysis
-      "openai/gpt-3.5-turbo",           // Always available, fast, cost-effective
-    ] as string[],
-    // Retry configuration
-    maxRetriesPerModel: 2,
-    timeoutMs: 45000, // 45 seconds per request
     enablePrePaymentValidation: true, // Test availability before settling payment
   },
 
@@ -54,15 +42,17 @@ export const TOOL_CONFIG = {
     compileSolidity: "10000",        // 0.01 USDC
     analyzeWithSlither: "20000",     // 0.02 USDC
     // Model-based pricing for AI audit endpoints
+    // Three primary models: DeepSeek (budget), Sonnet (premium), Fable (ultra premium)
+    // Each model has 3 fallback models configured in openrouter.ts
     getAuditChecklist: {
-      DeepSeek: "50000",             // 0.05 USDC - DeepSeek v4.1
+      DeepSeek: "50000",             // 0.05 USDC - DeepSeek V4.1 Flash
       Sonnet: "150000",              // 0.15 USDC - Claude Sonnet 5.5
-      Fable: "300000"                // 0.30 USDC - Claude Fable 5
+      Fable: "300000"                // 0.30 USDC - Claude Fable 5.1
     },
     doAudit: {
-      DeepSeek: "150000",            // 0.15 USDC - DeepSeek v4.1
+      DeepSeek: "150000",            // 0.15 USDC - DeepSeek V4.1 Flash
       Sonnet: "250000",              // 0.25 USDC - Claude Sonnet 5.5
-      Fable: "700000"                // 0.70 USDC - Claude Fable 5
+      Fable: "700000"                // 0.70 USDC - Claude Fable 5.1
     },
     compileAndDeploy: {
       baseFee: "50000",              // 0.05 USDC (minimum/fallback)

@@ -11,41 +11,65 @@
 import { OpenRouter } from "@openrouter/sdk";
 
 /**
- * Configuration for OpenRouter fallback models
- * Models are tried in order until one succeeds
+ * Per-model fallback configuration for audit endpoints
+ * Each model has 3 fallback models (downgrades/cheaper alternatives)
  *
- * Priority order:
- * 1. deepseek/deepseek-v4.1-flash - Fast and cost-effective primary model
- * 2. anthropic/claude-sonnet-5.5 - Latest Sonnet model, high quality and reliable
- * 3. openai/gpt-4o - Excellent for code analysis
- * 4. openai/gpt-3.5-turbo - Always available, fast, cost-effective fallback
+ * Three primary audit models:
+ * 1. DeepSeek V4.1 Flash - Fast and cost-effective
+ * 2. Claude Sonnet 5.5 - High quality
+ * 3. Claude Fable 5.1 - Premium quality
  */
-export const OPENROUTER_FALLBACK_MODELS = [
-  {
-    model: "deepseek/deepseek-v4.1-flash",
-    description: "DeepSeek v4.1 Flash (primary)",
+export const MODEL_FALLBACK_CONFIG = {
+  // DeepSeek V4.1 Flash fallbacks (downgrades to cheaper/faster models)
+  "deepseek/deepseek-v4.1-flash": {
+    fallbacks: [
+      "z-ai/glm-5.3-flashx",                  // GLM 5.3 Flash
+      "xiaomi/mimo-v2.6-flash",               // MiMo V2.6 Flash
+      "~deepseek/deepseek-v4-flash-latest"    // DeepSeek V4 Flash Latest (downgrade)
+    ],
+    description: "DeepSeek V4.1 Flash",
     maxRetries: 2,
-    timeout: 60000, // 60 seconds
+    timeout: 60000
   },
-  {
-    model: "anthropic/claude-sonnet-5.5",
-    description: "Claude Sonnet 5.5 (high quality fallback)",
+
+  // Claude Sonnet 5.5 fallbacks (downgrades to cheaper models)
+  "anthropic/claude-sonnet-5.5": {
+    fallbacks: [
+      "openai/gpt-6-sol",              // GPT-6 Sol
+      "~openai/gpt-terra-latest",      // GPT-6 Terra
+      "google/gemini-pro"              // Gemini Pro Latest
+    ],
+    description: "Claude Sonnet 5.5",
     maxRetries: 2,
-    timeout: 45000, // 45 seconds
+    timeout: 45000
   },
-  {
-    model: "openai/gpt-4o",
-    description: "GPT-4o (reliable fallback)",
+
+  // Claude Fable 5.1 fallbacks (downgrades to cheaper models)
+  "anthropic/claude-fable-5.1": {
+    fallbacks: [
+      "openai/gpt-6-astra",            // GPT-6 Astra
+      "openai/gpt-6-astra-pro",        // GPT-6 Astra Pro
+      "anthropic/claude-fable-5"       // Claude Fable 5 (downgrade)
+    ],
+    description: "Claude Fable 5.1",
     maxRetries: 2,
-    timeout: 45000, // 45 seconds
-  },
-  {
-    model: "openai/gpt-3.5-turbo",
-    description: "GPT-3.5 Turbo (always-available fallback)",
-    maxRetries: 3,
-    timeout: 30000, // 30 seconds
-  },
-] as const;
+    timeout: 45000
+  }
+} as const;
+
+/**
+ * Get all models to try (primary + fallbacks) for a specific model
+ * @param primaryModel - The primary model identifier
+ * @returns Array with primary model followed by its fallbacks
+ */
+function getModelsToTry(primaryModel: string): string[] {
+  const config = MODEL_FALLBACK_CONFIG[primaryModel as keyof typeof MODEL_FALLBACK_CONFIG];
+  if (config) {
+    return [primaryModel, ...config.fallbacks];
+  }
+  // If model not in config, return only the primary model
+  return [primaryModel];
+}
 
 export interface OpenRouterCallOptions {
   systemMessage: string;
@@ -53,7 +77,7 @@ export interface OpenRouterCallOptions {
   maxTokens?: number;
   temperature?: number;
   responseFormat?: { type: "json_object" | "text" };
-  models?: string[]; // Override default fallback models
+  primaryModel: string; // Primary model to use (will use its configured fallbacks)
   skipValidation?: boolean; // Skip pre-request validation (for testing)
 }
 
@@ -85,10 +109,9 @@ function validateApiKey(): void {
 /**
  * Test OpenRouter API availability with a lightweight request
  * This should be called BEFORE payment settlement to ensure service is available
- * @param modelId - Optional specific OpenRouter model ID to test (e.g., "anthropic/claude-sonnet-5.5")
- *                  If not provided, tests with the primary fallback model
+ * @param modelId - Specific OpenRouter model ID to test (e.g., "anthropic/claude-sonnet-5.5")
  */
-export async function testOpenRouterAvailability(modelId?: string): Promise<boolean> {
+export async function testOpenRouterAvailability(modelId: string): Promise<boolean> {
   try {
     validateApiKey();
 
@@ -96,15 +119,12 @@ export async function testOpenRouterAvailability(modelId?: string): Promise<bool
       apiKey: process.env.OPENROUTER_API_KEY!
     });
 
-    // Use specified model or default to primary fallback model
-    const testModel = modelId || OPENROUTER_FALLBACK_MODELS[0].model;
-
-    console.log(`🔍 Testing OpenRouter API availability for model: ${testModel}...`);
+    console.log(`🔍 Testing OpenRouter API availability for model: ${modelId}...`);
 
     await Promise.race([
       openrouter.chat.send({
         chatRequest: {
-          model: testModel,
+          model: modelId,
           messages: [
             {
               role: "user",
@@ -120,11 +140,10 @@ export async function testOpenRouterAvailability(modelId?: string): Promise<bool
       )
     ]);
 
-    console.log(`✅ OpenRouter API is available for model: ${testModel}`);
+    console.log(`✅ OpenRouter API is available for model: ${modelId}`);
     return true;
   } catch (error: any) {
-    const modelName = modelId || OPENROUTER_FALLBACK_MODELS[0].model;
-    console.error(`❌ OpenRouter API availability test failed for model ${modelName}:`, error.message);
+    console.error(`❌ OpenRouter API availability test failed for model ${modelId}:`, error.message);
     return false;
   }
 }
@@ -149,17 +168,17 @@ export async function callOpenRouterWithFallback(
     maxTokens = 32768,
     temperature = 0.7,
     responseFormat,
-    models,
+    primaryModel,
     skipValidation = false,
   } = options;
 
-  // Use custom models or default fallback list
-  const modelsToTry: string[] = models || OPENROUTER_FALLBACK_MODELS.map(m => m.model);
+  // Get models to try (primary + its fallbacks)
+  const modelsToTry = getModelsToTry(primaryModel);
   const attemptedModels: string[] = [];
 
   // Pre-request validation (unless skipped)
   if (!skipValidation) {
-    const isAvailable = await testOpenRouterAvailability();
+    const isAvailable = await testOpenRouterAvailability(primaryModel);
     if (!isAvailable) {
       return {
         success: false,
@@ -178,15 +197,17 @@ export async function callOpenRouterWithFallback(
 
   // Try each model in the fallback list
   for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
-    const currentModel = modelsToTry[modelIndex]!; // Non-null assertion - we're iterating within bounds
-    const modelConfig = OPENROUTER_FALLBACK_MODELS.find(m => m.model === currentModel) || {
-      model: currentModel,
-      description: "Custom model",
+    const currentModel = modelsToTry[modelIndex]!;
+
+    // Look up model config (use defaults if not found)
+    const perModelConfig = MODEL_FALLBACK_CONFIG[currentModel as keyof typeof MODEL_FALLBACK_CONFIG];
+    const modelConfig = perModelConfig || {
+      description: "Model",
       maxRetries: 2,
       timeout: 45000,
     };
 
-    console.log(`🤖 Attempting with model: ${modelConfig.model} (${modelConfig.description})`);
+    console.log(`🤖 Attempting with model: ${currentModel} (${modelConfig.description})`);
     attemptedModels.push(currentModel);
 
     // Retry logic for current model
@@ -290,18 +311,23 @@ export async function callOpenRouterWithFallback(
 /**
  * Model name mapping for user-friendly model selection
  * Maps simple model names to full OpenRouter model identifiers
+ *
+ * Three primary audit models supported:
+ * - DeepSeek: Fast and cost-effective (0.05 USDC checklist, 0.15 USDC audit)
+ * - Sonnet: High quality (0.15 USDC checklist, 0.25 USDC audit)
+ * - Fable: Premium quality (0.30 USDC checklist, 0.70 USDC audit)
  */
 export const MODEL_MAPPINGS = {
   DeepSeek: "deepseek/deepseek-v4.1-flash",
   Sonnet: "anthropic/claude-sonnet-5.5",
-  Fable: "anthropic/claude-fable-5"
+  Fable: "anthropic/claude-fable-5.1",
 } as const;
 
 export type ModelName = keyof typeof MODEL_MAPPINGS;
 
 /**
  * Convert user-friendly model name to OpenRouter model identifier
- * @param modelName - User-friendly model name (DeepSeek, Sonnet, or Fable)
+ * @param modelName - User-friendly model name (e.g., DeepSeek, Sonnet, GPT6Sol)
  * @returns OpenRouter model identifier
  * @throws Error if model name is not valid
  */

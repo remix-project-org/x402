@@ -1135,7 +1135,7 @@ Return a JSON object with this structure:
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
-      models: [openRouterModelId], // Use single user-selected model
+      primaryModel: openRouterModelId, // Use user-selected model with its fallbacks
       skipValidation: true, // We already validated availability above
     });
 
@@ -1539,7 +1539,7 @@ Please perform a complete security audit of the above contracts against the prov
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
-      models: [openRouterModelId], // Use single user-selected model
+      primaryModel: openRouterModelId, // Use user-selected model with its fallbacks
       skipValidation: true, // We already validated availability above
     });
 
