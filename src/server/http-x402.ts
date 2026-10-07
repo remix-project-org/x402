@@ -347,6 +347,20 @@ async function verifyPayment(payment: any, v2Requirements: any, resourceUrl: str
       extra: acceptedRequirements.extra || {},
     };
 
+    // CRITICAL: Validate payment amount BEFORE settling
+    // Prevent payment loss if amount doesn't match expected value
+    const paidAmount = payment.payload?.authorization?.value?.toString() || "0";
+    const expectedAmount = acceptedRequirements.amount?.toString() || "0";
+
+    if (paidAmount !== expectedAmount) {
+      paymentLogger.error({
+        expectedAmount,
+        paidAmount,
+        stage: 'pre_settlement_amount_mismatch'
+      }, 'Payment amount does not match requirements - rejecting BEFORE settlement');
+      return false;
+    }
+
     const client = getFacilitatorClient();
 
     // Step 1: Verify payment authorization
@@ -1074,12 +1088,21 @@ contract MyToken {
         stage: 'payment_amount_mismatch'
       }, 'Payment amount does not match selected model price');
 
-      res.writeHead(402, { "Content-Type": "application/json" });
+      // CRITICAL: Payment was already settled! Must return 400 with PAYMENT-RESPONSE header
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
       res.end(JSON.stringify({
         error: "Payment amount mismatch",
         details: `Selected model "${requestedModel}" requires ${parseInt(amount) / 1_000_000} USDC, but ${parseInt(paidAmount) / 1_000_000} USDC was paid`,
         expectedAmount: amount,
-        paidAmount
+        paidAmount,
+        paymentStatus: "settled"
       }));
       return;
     }
@@ -1510,12 +1533,21 @@ contract MyToken {
         stage: 'payment_amount_mismatch'
       }, 'Payment amount does not match selected model price');
 
-      res.writeHead(402, { "Content-Type": "application/json" });
+      // CRITICAL: Payment was already settled! Must return 400 with PAYMENT-RESPONSE header
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
       res.end(JSON.stringify({
         error: "Payment amount mismatch",
         details: `Selected model "${requestedModel}" requires ${parseInt(amount) / 1_000_000} USDC, but ${parseInt(paidAmount) / 1_000_000} USDC was paid`,
         expectedAmount: amount,
-        paidAmount
+        paidAmount,
+        paymentStatus: "settled"
       }));
       return;
     }
