@@ -838,6 +838,12 @@ contract Example {
  * Handle /get_audit_checklist endpoint - OpenRouter AI prompts for smart contract analysis
  */
 async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.ServerResponse) {
+  // Prevent duplicate handling if response already sent
+  if (res.writableEnded) {
+    httpLogger.warn({ endpoint: '/get_audit_checklist' }, "Attempted to handle request but response already sent");
+    return;
+  }
+
   // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
   if (!process.env.SERVER_BASE_URL) {
     throw new Error("SERVER_BASE_URL environment variable is required");
@@ -954,6 +960,11 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
           required: ["content"]
         }
       },
+      model: {
+        type: "string",
+        enum: ["DeepSeek", "Sonnet", "Fable"],
+        description: "AI model to use for analysis (Required). DeepSeek ($0.05): fast and cost-effective. Sonnet ($0.15): high quality. Fable ($0.30): premium quality. Payment amount must match selected model."
+      },
       maxCategories: {
         type: "number",
         description: "Maximum number of audit categories to match (default: 12, max: 20)",
@@ -961,7 +972,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
         maximum: 20
       }
     },
-    required: ["sources"]
+    required: ["sources", "model"]
   };
 
   const inputExample = {
@@ -980,6 +991,7 @@ contract MyToken {
 }`
       }
     },
+    model: "DeepSeek",
     maxCategories: 12
   };
 
@@ -1033,8 +1045,18 @@ contract MyToken {
     const { sources, maxCategories = 12 } = body;
 
     if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: sources. At least one contract file is required." }));
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
+      res.end(JSON.stringify({
+        error: "Missing required field: sources. At least one contract file is required.",
+        paymentStatus: "settled"
+      }));
       return;
     }
 
@@ -1062,12 +1084,20 @@ contract MyToken {
       return;
     }
 
-    // Check for OpenRouter API key
+    // Check for OpenRouter API key before processing
     if (!process.env.OPENROUTER_API_KEY) {
-      res.writeHead(500, { "Content-Type": "application/json" });
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
       res.end(JSON.stringify({
         error: "OpenRouter API key not configured",
-        details: "OPENROUTER_API_KEY environment variable is required"
+        details: "OPENROUTER_API_KEY environment variable is required",
+        paymentStatus: "settled"
       }));
       return;
     }
@@ -1147,11 +1177,19 @@ Return a JSON object with this structure:
         error: openRouterResult.error,
         attemptedModels: openRouterResult.attemptedModels
       }, "OpenRouter request failed");
-      res.writeHead(500, { "Content-Type": "application/json" });
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
       res.end(JSON.stringify({
         error: "AI service request failed",
         details: openRouterResult.error || "Unknown error",
-        attemptedModels: openRouterResult.attemptedModels
+        attemptedModels: openRouterResult.attemptedModels,
+        paymentStatus: "settled"
       }));
       return;
     }
@@ -1218,6 +1256,12 @@ Return a JSON object with this structure:
  * Handle /do_audit endpoint - Complete audit report generation
  */
 async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse) {
+  // Prevent duplicate handling if response already sent
+  if (res.writableEnded) {
+    httpLogger.warn({ endpoint: '/do_audit' }, "Attempted to handle request but response already sent");
+    return;
+  }
+
   // CRITICAL: Must use SERVER_BASE_URL for correct resource URLs in production
   if (!process.env.SERVER_BASE_URL) {
     throw new Error("SERVER_BASE_URL environment variable is required");
@@ -1334,9 +1378,14 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
       checklist: {
         type: "string",
         description: "Audit checklist in markdown format (from get_audit_checklist endpoint or custom checklist)"
+      },
+      model: {
+        type: "string",
+        enum: ["DeepSeek", "Sonnet", "Fable"],
+        description: "AI model to use for analysis (Required). DeepSeek ($0.15): fast and cost-effective. Sonnet ($0.25): high quality. Fable ($0.70): premium quality. Payment amount must match selected model."
       }
     },
-    required: ["sources", "checklist"]
+    required: ["sources", "checklist", "model"]
   };
 
   const inputExample = {
@@ -1355,7 +1404,8 @@ contract MyToken {
 }`
       }
     },
-    checklist: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n..."
+    checklist: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n...",
+    model: "Sonnet"
   };
 
   const outputExample = {
@@ -1415,14 +1465,34 @@ contract MyToken {
     const { sources, checklist } = body;
 
     if (!sources || typeof sources !== 'object' || Object.keys(sources).length === 0) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: sources. At least one contract file is required." }));
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
+      res.end(JSON.stringify({
+        error: "Missing required field: sources. At least one contract file is required.",
+        paymentStatus: "settled"
+      }));
       return;
     }
 
     if (!checklist || typeof checklist !== 'string') {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Missing required field: checklist. Provide audit checklist in markdown format." }));
+      res.writeHead(400, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
+      res.end(JSON.stringify({
+        error: "Missing required field: checklist. Provide audit checklist in markdown format.",
+        paymentStatus: "settled"
+      }));
       return;
     }
 
@@ -1452,10 +1522,18 @@ contract MyToken {
 
     // Check for OpenRouter API key
     if (!process.env.OPENROUTER_API_KEY) {
-      res.writeHead(500, { "Content-Type": "application/json" });
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
       res.end(JSON.stringify({
         error: "OpenRouter API key not configured",
-        details: "OPENROUTER_API_KEY environment variable is required"
+        details: "OPENROUTER_API_KEY environment variable is required",
+        paymentStatus: "settled"
       }));
       return;
     }
@@ -1551,11 +1629,19 @@ Please perform a complete security audit of the above contracts against the prov
         error: openRouterResult.error,
         attemptedModels: openRouterResult.attemptedModels
       }, "OpenRouter request failed");
-      res.writeHead(500, { "Content-Type": "application/json" });
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "settled",
+          network: requirementsWithExtensions.accepts[0]!.network,
+          amount: requirementsWithExtensions.accepts[0]!.amount,
+        })).toString("base64")
+      });
       res.end(JSON.stringify({
         error: "AI service request failed",
         details: openRouterResult.error || "Unknown error",
-        attemptedModels: openRouterResult.attemptedModels
+        attemptedModels: openRouterResult.attemptedModels,
+        paymentStatus: "settled"
       }));
       return;
     }
@@ -1581,6 +1667,8 @@ Please perform a complete security audit of the above contracts against the prov
       severity: severityCounts,
       topFindings: findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`)
     }, "Audit completed successfully");
+
+    httpLogger.info({ endpoint: '/do_audit', stage: 'generating_markdown' }, "Starting markdown report generation");
 
     // Generate markdown audit report
     const reportLines: string[] = [];
@@ -1626,7 +1714,13 @@ Please perform a complete security audit of the above contracts against the prov
 
         for (let i = 0; i < severityFindings.length; i++) {
           const finding = severityFindings[i];
-          reportLines.push(`### ${i + 1}. ${finding.title}`);
+
+          // Safely handle potentially missing or undefined fields
+          const title = finding.title || 'Untitled Finding';
+          const description = finding.description || 'No description provided';
+          const remediation = finding.remediation || 'No remediation provided';
+
+          reportLines.push(`### ${i + 1}. ${title}`);
           reportLines.push('');
           reportLines.push(`**Severity**: ${severity}`);
           if (finding.location) {
@@ -1634,31 +1728,33 @@ Please perform a complete security audit of the above contracts against the prov
           }
           reportLines.push('');
           reportLines.push('**Description**:');
-          reportLines.push(finding.description);
+          reportLines.push(description);
           reportLines.push('');
 
           if (finding.code) {
             reportLines.push('**Code**:');
             reportLines.push('```solidity');
-            reportLines.push(finding.code);
+            reportLines.push(String(finding.code));
             reportLines.push('```');
             reportLines.push('');
           }
 
           if (finding.impact) {
             reportLines.push('**Impact**:');
-            reportLines.push(finding.impact);
+            reportLines.push(String(finding.impact));
             reportLines.push('');
           }
 
           reportLines.push('**Remediation**:');
-          reportLines.push(finding.remediation);
+          reportLines.push(remediation);
           reportLines.push('');
           reportLines.push('---');
           reportLines.push('');
         }
       }
     }
+
+    httpLogger.info({ endpoint: '/do_audit', stage: 'markdown_complete', reportLength: reportLines.length }, "Markdown report generation complete");
 
     // Add recommendations section
     if (recommendations.length > 0) {
@@ -1682,19 +1778,73 @@ Please perform a complete security audit of the above contracts against the prov
       amount: requirementsWithExtensions.accepts[0]!.amount,
     })).toString("base64");
 
-    res.writeHead(200, {
-      "Content-Type": "application/json",
-      "PAYMENT-RESPONSE": paymentResponseHeader,
-    });
-
-    res.end(JSON.stringify({
+    // Prepare response object
+    const responseData = {
       success: true,
       markdown: markdownReport,
       findingsCount: findings.length,
       severity: severityCounts,
       model: model,
       tokensUsed: tokensUsed
-    }));
+    };
+
+    // Try to serialize - if it fails, we'll catch it and return an error with PAYMENT-RESPONSE header
+    let responseBody: string;
+    try {
+      responseBody = JSON.stringify(responseData);
+    } catch (serializationError: any) {
+      httpLogger.error({
+        error: serializationError.message,
+        markdownLength: markdownReport.length,
+        findingsCount: findings.length
+      }, "Failed to serialize audit response");
+
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": paymentResponseHeader,
+      });
+      res.end(JSON.stringify({
+        error: "Failed to serialize audit response",
+        details: serializationError.message,
+        paymentStatus: "settled",
+        findingsCount: findings.length
+      }));
+      return;
+    }
+
+    httpLogger.info({
+      endpoint: '/do_audit',
+      status: 200,
+      responseBodyLength: responseBody.length,
+      findingsCount: findings.length,
+      markdownLength: markdownReport.length,
+      paymentResponseHeader: paymentResponseHeader.substring(0, 50) + '...',
+      responseEnded: res.writableEnded
+    }, "Sending successful audit response");
+
+    // Check if response was already sent (duplicate request handling)
+    if (res.writableEnded) {
+      httpLogger.error({ endpoint: '/do_audit' }, "Cannot send response - response already ended");
+      return;
+    }
+
+    try {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": paymentResponseHeader,
+      });
+
+      res.end(responseBody);
+
+      httpLogger.info({ endpoint: '/do_audit' }, "Response sent successfully");
+    } catch (writeError: any) {
+      httpLogger.error({
+        endpoint: '/do_audit',
+        error: writeError.message,
+        stack: writeError.stack
+      }, "Failed to write response");
+      // Don't throw - response might have been partially sent
+    }
 
   } catch (error: any) {
     // Payment was settled, but service failed - provide detailed error info
@@ -1826,6 +1976,11 @@ export function startHttpX402Server() {
       res.end(JSON.stringify({ error: "Internal server error" }));
     }
   });
+
+  // Set server timeout to match maxTimeoutSeconds (300s) + buffer for processing
+  // This prevents the server from cutting off long-running audit requests
+  server.timeout = 360000; // 360 seconds = 6 minutes (300s + 60s buffer)
+  server.keepAliveTimeout = 365000; // Slightly higher than timeout
 
   server.listen(HTTP_X402_PORT, () => {
     // Validate required environment variables
