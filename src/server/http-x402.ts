@@ -26,7 +26,6 @@ import {
   type AuditMatch
 } from "./utils/audit-checklist.js";
 import {
-  testOpenRouterAvailability,
   callOpenRouterJSON,
   mapModelName
 } from "./utils/openrouter.js";
@@ -913,7 +912,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
   // Only validate after payment is confirmed
   let openRouterModelId: string | undefined;
   if (paymentSignature) {
-    // Payment provided - validate OpenRouter availability
+    // Payment provided - map model name
     try {
       openRouterModelId = mapModelName(requestedModel);
     } catch (error: any) {
@@ -926,28 +925,7 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
       endpoint: '/get_audit_checklist',
       requestedModel,
       openRouterModelId
-    }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
-
-    try {
-      const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
-
-      if (!isAnyModelAvailable) {
-        httpLogger.info({
-          requestedModel,
-          openRouterModelId
-        }, "Primary model not available, will try fallbacks after payment");
-      } else {
-        httpLogger.info({
-          requestedModel,
-          openRouterModelId
-        }, "Primary model is available");
-      }
-    } catch (availError: any) {
-      httpLogger.warn({
-        error: availError.message,
-        requestedModel
-      }, "Availability check failed, will proceed with payment and try model chain");
-    }
+    }, "Model mapped successfully, skipping pre-payment availability check (will use fallbacks if needed)");
   }
 
   // Get the correct amount based on selected model (or default for 402 response)
@@ -1337,7 +1315,7 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
   // Skip OpenRouter availability check if no payment yet (for 402 response)
   let openRouterModelId: string | undefined;
   if (paymentSignature) {
-    // Payment provided - validate OpenRouter availability
+    // Payment provided - map model name
     try {
       openRouterModelId = mapModelName(requestedModel);
     } catch (error: any) {
@@ -1350,28 +1328,7 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
       endpoint: '/do_audit',
       requestedModel,
       openRouterModelId
-    }, "Pre-request validation: Testing OpenRouter availability (primary + fallbacks)");
-
-    try {
-      const isAnyModelAvailable = await testOpenRouterAvailability(openRouterModelId);
-
-      if (!isAnyModelAvailable) {
-        httpLogger.info({
-          requestedModel,
-          openRouterModelId
-        }, "Primary model not available, will try fallbacks after payment");
-      } else {
-        httpLogger.info({
-          requestedModel,
-          openRouterModelId
-        }, "Primary model is available");
-      }
-    } catch (availError: any) {
-      httpLogger.warn({
-        error: availError.message,
-        requestedModel
-      }, "Availability check failed, will proceed with payment and try model chain");
-    }
+    }, "Model mapped successfully, skipping pre-payment availability check (will use fallbacks if needed)");
   }
 
   // Get the correct amount based on selected model (or default for 402 response)
