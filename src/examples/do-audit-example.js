@@ -146,12 +146,22 @@ async function main() {
     const checklistResponse = await x402Fetch(getChecklistEndpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept-Encoding": "gzip"  // Request gzip compression
       },
       body: JSON.stringify(checklistRequestBody)
     });
 
     console.log(`   Response status: ${checklistResponse.status}`);
+
+    // Check for compression
+    const contentEncoding = checklistResponse.headers.get('content-encoding');
+    const contentLength = checklistResponse.headers.get('content-length');
+    if (contentEncoding === 'gzip') {
+      console.log(`   ✅ Response compressed with gzip (size: ${contentLength} bytes)`);
+    } else {
+      console.log(`   ℹ️  Response not compressed (size: ${contentLength || 'unknown'} bytes)`);
+    }
 
     if (!checklistResponse.ok) {
       const errorText = await checklistResponse.text();
@@ -200,12 +210,22 @@ async function main() {
     const auditResponse = await x402Fetch(doAuditEndpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept-Encoding": "gzip"  // Request gzip compression
       },
       body: JSON.stringify(auditRequestBody)
     });
 
     console.log(`   Response status: ${auditResponse.status}`);
+
+    // Check for compression
+    const auditContentEncoding = auditResponse.headers.get('content-encoding');
+    const auditContentLength = auditResponse.headers.get('content-length');
+    if (auditContentEncoding === 'gzip') {
+      console.log(`   ✅ Response compressed with gzip (size: ${auditContentLength} bytes)`);
+    } else {
+      console.log(`   ℹ️  Response not compressed (size: ${auditContentLength || 'unknown'} bytes)`);
+    }
 
     if (!auditResponse.ok) {
       const errorText = await auditResponse.text();
@@ -278,6 +298,10 @@ async function main() {
     console.log("✅ Complete audit workflow finished successfully!");
     console.log();
     console.log(`Selected Model: ${selectedModel}`);
+    console.log();
+    console.log("Compression Status:");
+    console.log(`   Checklist Response: ${contentEncoding === 'gzip' ? '✅ Compressed' : '❌ Not compressed'}`);
+    console.log(`   Audit Response:     ${auditContentEncoding === 'gzip' ? '✅ Compressed' : '❌ Not compressed'}`);
     console.log();
     console.log("Total Cost:");
     console.log(`   Step 1 (Checklist): ${checklistPrices[selectedModel]} USDC`);

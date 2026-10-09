@@ -10,6 +10,8 @@
 
 import http from "http";
 import { URL } from "url";
+import { gzip } from "zlib";
+import { promisify } from "util";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
@@ -31,7 +33,62 @@ import {
 } from "./utils/openrouter.js";
 import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVerification, logResponseSent } from "./utils/logger.js";
 
+const gzipAsync = promisify(gzip);
+
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
+
+/**
+ * Check if client accepts gzip encoding
+ */
+function acceptsGzip(req: http.IncomingMessage): boolean {
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  return acceptEncoding.includes('gzip');
+}
+
+/**
+ * Send JSON response with optional gzip compression
+ * Automatically compresses if client accepts gzip and response is large enough
+ */
+async function sendJsonResponse(
+  res: http.ServerResponse,
+  statusCode: number,
+  data: any,
+  headers: Record<string, string> = {},
+  req?: http.IncomingMessage
+): Promise<void> {
+  const jsonString = JSON.stringify(data);
+  const shouldCompress = req && acceptsGzip(req) && jsonString.length > 1024; // Compress if > 1KB
+
+  const responseHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...headers
+  };
+
+  if (shouldCompress) {
+    try {
+      const compressed = await gzipAsync(jsonString);
+      responseHeaders["Content-Encoding"] = "gzip";
+      responseHeaders["Content-Length"] = String(compressed.length);
+
+      httpLogger.debug({
+        originalSize: jsonString.length,
+        compressedSize: compressed.length,
+        compressionRatio: (compressed.length / jsonString.length * 100).toFixed(1) + '%'
+      }, 'Response compressed with gzip');
+
+      res.writeHead(statusCode, responseHeaders);
+      res.end(compressed);
+    } catch (error) {
+      // Fallback to uncompressed if compression fails
+      httpLogger.warn({ error }, 'Gzip compression failed, sending uncompressed');
+      res.writeHead(statusCode, responseHeaders);
+      res.end(jsonString);
+    }
+  } else {
+    res.writeHead(statusCode, responseHeaders);
+    res.end(jsonString);
+  }
+}
 
 /**
  * Create a detailed error response for failures after payment settlement
@@ -1216,19 +1273,16 @@ Return a JSON object with this structure:
       amount: requirementsWithExtensions.accepts[0]!.amount,
     })).toString("base64");
 
-    res.writeHead(200, {
-      "Content-Type": "application/json",
-      "PAYMENT-RESPONSE": paymentResponseHeader,
-    });
-
-    res.end(JSON.stringify({
+    await sendJsonResponse(res, 200, {
       success: true,
       markdown: markdownReport,
       matchedCategories: matches.length,
       skippedReason: skippedReason,
       model: model,
       tokensUsed: tokensUsed
-    }));
+    }, {
+      "PAYMENT-RESPONSE": paymentResponseHeader,
+    }, req);
 
   } catch (error: any) {
     // Payment was settled, but service failed - provide detailed error info
@@ -1777,37 +1831,11 @@ Please perform a complete security audit of the above contracts against the prov
       tokensUsed: tokensUsed
     };
 
-    // Try to serialize - if it fails, we'll catch it and return an error with PAYMENT-RESPONSE header
-    let responseBody: string;
-    try {
-      responseBody = JSON.stringify(responseData);
-    } catch (serializationError: any) {
-      httpLogger.error({
-        error: serializationError.message,
-        markdownLength: markdownReport.length,
-        findingsCount: findings.length
-      }, "Failed to serialize audit response");
-
-      res.writeHead(500, {
-        "Content-Type": "application/json",
-        "PAYMENT-RESPONSE": paymentResponseHeader,
-      });
-      res.end(JSON.stringify({
-        error: "Failed to serialize audit response",
-        details: serializationError.message,
-        paymentStatus: "settled",
-        findingsCount: findings.length
-      }));
-      return;
-    }
-
     httpLogger.info({
       endpoint: '/do_audit',
       status: 200,
-      responseBodyLength: responseBody.length,
       findingsCount: findings.length,
       markdownLength: markdownReport.length,
-      paymentResponseHeader: paymentResponseHeader.substring(0, 50) + '...',
       responseEnded: res.writableEnded
     }, "Sending successful audit response");
 
@@ -1818,12 +1846,9 @@ Please perform a complete security audit of the above contracts against the prov
     }
 
     try {
-      res.writeHead(200, {
-        "Content-Type": "application/json",
+      await sendJsonResponse(res, 200, responseData, {
         "PAYMENT-RESPONSE": paymentResponseHeader,
-      });
-
-      res.end(responseBody);
+      }, req);
 
       httpLogger.info({ endpoint: '/do_audit' }, "Response sent successfully");
     } catch (writeError: any) {
@@ -1925,8 +1950,8 @@ export function startHttpX402Server() {
     // Enable CORS
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Payment-Signature");
-    res.setHeader("Access-Control-Expose-Headers", "Payment-Required, Payment-Response");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Payment-Signature, Accept-Encoding");
+    res.setHeader("Access-Control-Expose-Headers", "Payment-Required, Payment-Response, Content-Encoding");
 
     // Handle preflight
     if (req.method === "OPTIONS") {

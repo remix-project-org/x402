@@ -99,6 +99,7 @@ async function main() {
 
     // Call the get_audit_checklist endpoint
     const requestBody = {
+      model: "DeepSeek",  // Required: AI model to use (DeepSeek, Sonnet, or Fable)
       sources: {
         "ExampleToken.sol": {
           content: EXAMPLE_CONTRACT
@@ -111,12 +112,22 @@ async function main() {
     const response = await x402Fetch(httpEndpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept-Encoding": "gzip"  // Request gzip compression
       },
       body: JSON.stringify(requestBody)
     });
 
     console.log(`\n📡 Response status: ${response.status}`);
+
+    // Check for compression
+    const contentEncoding = response.headers.get('content-encoding');
+    const contentLength = response.headers.get('content-length');
+    if (contentEncoding === 'gzip') {
+      console.log(`✅ Response compressed with gzip (size: ${contentLength} bytes)`);
+    } else {
+      console.log(`ℹ️  Response not compressed (size: ${contentLength || 'unknown'} bytes)`);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -130,6 +141,7 @@ async function main() {
     console.log(`📊 Matched Categories: ${result.matchedCategories}`);
     console.log(`🤖 Model: ${result.model}`);
     console.log(`💰 Tokens Used: ${result.tokensUsed}`);
+    console.log(`🗜️  Compression: ${contentEncoding === 'gzip' ? 'Enabled' : 'Disabled'}`);
     console.log();
     console.log("=" .repeat(50));
     console.log("📄 Markdown Report:");
