@@ -29,7 +29,7 @@ export const MODEL_FALLBACK_CONFIG = {
     ],
     description: "DeepSeek V4.1 Flash",
     maxRetries: 2,
-    timeout: 60000
+    timeout: 120000  // 120 seconds (2 minutes) for large audit prompts
   },
 
   // Claude Sonnet 5.5 fallbacks (downgrades to cheaper models)
@@ -41,7 +41,7 @@ export const MODEL_FALLBACK_CONFIG = {
     ],
     description: "Claude Sonnet 5.5",
     maxRetries: 2,
-    timeout: 45000
+    timeout: 90000  // 90 seconds for large audit prompts
   },
 
   // Claude Fable 5.1 fallbacks (downgrades to cheaper models)
@@ -53,7 +53,7 @@ export const MODEL_FALLBACK_CONFIG = {
     ],
     description: "Claude Fable 5.1",
     maxRetries: 2,
-    timeout: 45000
+    timeout: 90000  // 90 seconds for large audit prompts
   }
 } as const;
 
