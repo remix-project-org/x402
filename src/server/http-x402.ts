@@ -32,6 +32,14 @@ import {
   mapModelName
 } from "./utils/openrouter.js";
 import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVerification, logResponseSent } from "./utils/logger.js";
+import {
+  createJob,
+  markJobAsProcessing,
+  completeJob,
+  failJob,
+  getJob,
+  deleteJob
+} from "./utils/job-store.js";
 
 const gzipAsync = promisify(gzip);
 
@@ -905,6 +913,203 @@ contract Example {
 }
 
 /**
+ * Handle /job/:id endpoint - Poll for job status and results (FREE, no payment required)
+ */
+async function handleJobStatus(req: http.IncomingMessage, res: http.ServerResponse, jobId: string) {
+  try {
+    const job = getJob(jobId);
+
+    if (!job) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Job not found",
+        jobId,
+        message: "Job may have expired or never existed. Jobs expire after 10 minutes or 5 minutes after completion."
+      }));
+      return;
+    }
+
+    // Return job status
+    if (job.status === "pending" || job.status === "processing") {
+      // Still processing
+      await sendJsonResponse(res, 200, {
+        jobId: job.id,
+        status: job.status,
+        endpoint: job.endpoint,
+        model: job.model,
+        createdAt: new Date(job.createdAt).toISOString(),
+        elapsedSeconds: Math.floor((Date.now() - job.createdAt) / 1000),
+        message: job.status === "pending" ? "Job is queued" : "Job is processing",
+        pollingUrl: job.pollingUrl,
+        instructions: "Continue polling this URL every 5-10 seconds"
+      }, {}, req);
+    } else if (job.status === "completed") {
+      // Completed successfully - return results
+      await sendJsonResponse(res, 200, {
+        jobId: job.id,
+        status: "completed",
+        endpoint: job.endpoint,
+        model: job.model,
+        createdAt: new Date(job.createdAt).toISOString(),
+        completedAt: job.completedAt ? new Date(job.completedAt).toISOString() : undefined,
+        processingSeconds: job.completedAt ? Math.floor((job.completedAt - job.createdAt) / 1000) : undefined,
+        result: job.result
+      }, {}, req);
+
+      // Delete job after successful retrieval (one-time use)
+      httpLogger.info({ jobId }, "Job results retrieved, deleting job");
+      deleteJob(jobId);
+    } else if (job.status === "failed") {
+      // Failed - return error
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        jobId: job.id,
+        status: "failed",
+        endpoint: job.endpoint,
+        model: job.model,
+        createdAt: new Date(job.createdAt).toISOString(),
+        completedAt: job.completedAt ? new Date(job.completedAt).toISOString() : undefined,
+        error: job.error,
+        message: "Job processing failed"
+      }));
+
+      // Delete failed job after retrieval
+      httpLogger.info({ jobId }, "Failed job retrieved, deleting job");
+      deleteJob(jobId);
+    }
+
+  } catch (error: any) {
+    httpLogger.error({ jobId, error: error.message }, "Error handling job status request");
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "Internal server error",
+      message: error.message
+    }));
+  }
+}
+
+/**
+ * Background processing function for audit checklist
+ * This runs asynchronously after returning the job ID to the client
+ */
+async function processAuditChecklistAsync(
+  jobId: string,
+  sources: Record<string, { content: string }>,
+  maxCategories: number,
+  requestedModel: string,
+  openRouterModelId: string
+): Promise<void> {
+  try {
+    markJobAsProcessing(jobId);
+
+    httpLogger.info({ jobId }, "Starting background audit checklist processing");
+
+    // Load and prepare the audit checklist
+    const checklist = loadAuditChecklist();
+    const flattenedCategories = flattenCategoriesForPrompt(checklist);
+    const categoryListPrompt = generateCategoryListPrompt(flattenedCategories);
+
+    httpLogger.info({
+      jobId,
+      categoriesLoaded: flattenedCategories.length
+    }, "Loaded audit categories from checklist");
+
+    // Process each contract and strip to skeleton
+    const contractSkeletons: { filename: string; skeleton: string }[] = [];
+    for (const [filename, fileData] of Object.entries(sources)) {
+      if (fileData && typeof fileData === 'object' && 'content' in fileData) {
+        const skeleton = stripToSkeleton(fileData.content);
+        contractSkeletons.push({ filename, skeleton });
+      }
+    }
+
+    // Build the user message with all contract skeletons
+    let contractsSection = '';
+    for (const { filename, skeleton } of contractSkeletons) {
+      contractsSection += `\n# Contract: ${filename}\n\`\`\`solidity\n${skeleton}\n\`\`\`\n`;
+    }
+
+    const userMessage = `# Audit categories — choose ONLY from these ${flattenedCategories.length} paths\n${categoryListPrompt}\n${contractsSection}\nReturn at most ${maxCategories} matches, each with a path copied verbatim from the list above.`;
+
+    const systemMessage = `You map a Solidity contract onto a security-audit checklist taxonomy.
+
+You are given a contract SKELETON (declarations only — function bodies have been stripped) and a fixed list of audit categories. Select every category whose checklist items would plausibly produce findings for this contract.
+
+Rules:
+1. Each "path" MUST be copied character-for-character from the supplied category list. Never invent, rename, merge, split, abbreviate or re-case a path, and never emit a parent category that is not itself in the list.
+2. Base every match on evidence visible in the skeleton — an import, an inherited base, a state variable, an event, a modifier or a function signature. Do not speculate about what the stripped function bodies might contain.
+3. Prefer the specific over the generic: if a protocol-specific interface is imported, match that integration's category as well as the general one.
+4. Also include cross-cutting categories (access control, external calls, centralisation, low-level operations, compiler-version concerns) when the skeleton shows the corresponding surface area.
+5. Return at most the requested number of categories, ordered most to least confident, with no duplicates.
+6. "reason" is ONE short sentence naming the specific evidence, e.g. "Inherits ERC20 and defines _mint/_burn." Do not restate the category name.
+7. "confidence" is high when the feature is unmistakable, medium when likely, low when plausible but weakly evidenced.
+8. If nothing applies — the file is an interface, a library, or holds no contract — return an empty "matches" array and set "skipped_reason".
+
+Return a JSON object with this structure:
+{
+  "matches": [
+    { "path": "exact category path", "reason": "brief evidence", "confidence": "high|medium|low" }
+  ],
+  "skipped_reason": "optional explanation if no matches"
+}`;
+
+    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter");
+
+    // Call OpenRouter API with user-selected model
+    const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
+      systemMessage,
+      userMessage,
+      maxTokens: 32768,
+      temperature: 0.7,
+      primaryModel: openRouterModelId,
+      skipValidation: true,
+    });
+
+    if (!openRouterResult.success || !openRouterResult.parsed) {
+      const errorMsg = openRouterResult.error || "Unknown error";
+      httpLogger.error({
+        jobId,
+        error: errorMsg,
+        attemptedModels: openRouterResult.attemptedModels
+      }, "OpenRouter request failed");
+      failJob(jobId, `AI service request failed: ${errorMsg}`);
+      return;
+    }
+
+    const { parsed, model, tokensUsed } = openRouterResult;
+    const matches = parsed.matches || [];
+    const skippedReason = parsed.skipped_reason;
+
+    httpLogger.info({
+      jobId,
+      model,
+      tokensUsed,
+      matchedCategories: matches.length,
+      topCategories: matches.slice(0, 3).map((m: any) => m.path.split('::').pop())
+    }, "Audit checklist matching completed successfully");
+
+    // Generate markdown report
+    const contractName = contractSkeletons.map(c => c.filename).join(', ');
+    const markdownReport = formatAuditReportMarkdown(matches, flattenedCategories, contractName);
+
+    // Complete job with results
+    completeJob(jobId, {
+      success: true,
+      markdown: markdownReport,
+      matchedCategories: matches.length,
+      skippedReason: skippedReason,
+      model: model,
+      tokensUsed: tokensUsed
+    });
+
+  } catch (error: any) {
+    httpLogger.error({ jobId, error: error.message }, "Background audit processing failed");
+    failJob(jobId, error.message || "Unknown error");
+    throw error;
+  }
+}
+
+/**
  * Handle /get_audit_checklist endpoint - OpenRouter AI prompts for smart contract analysis
  */
 async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -1163,109 +1368,16 @@ contract MyToken {
     httpLogger.info({
       contractFiles: Object.keys(sources),
       maxCategories
-    }, "Processing audit checklist request");
+    }, "Processing audit checklist request (async mode)");
 
     // At this point, openRouterModelId must be defined (validated above)
     if (!openRouterModelId) {
       throw new Error("openRouterModelId should have been validated after payment");
     }
 
-    // Load and prepare the audit checklist
-    const checklist = loadAuditChecklist();
-    const flattenedCategories = flattenCategoriesForPrompt(checklist);
-    const categoryListPrompt = generateCategoryListPrompt(flattenedCategories);
-
-    httpLogger.info({
-      categoriesLoaded: flattenedCategories.length
-    }, "Loaded audit categories from checklist");
-
-    // Process each contract and strip to skeleton
-    const contractSkeletons: { filename: string; skeleton: string }[] = [];
-    for (const [filename, fileData] of Object.entries(sources)) {
-      if (fileData && typeof fileData === 'object' && 'content' in fileData) {
-        const skeleton = stripToSkeleton((fileData as any).content);
-        contractSkeletons.push({ filename, skeleton });
-      }
-    }
-
-    // Build the user message with all contract skeletons
-    let contractsSection = '';
-    for (const { filename, skeleton } of contractSkeletons) {
-      contractsSection += `\n# Contract: ${filename}\n\`\`\`solidity\n${skeleton}\n\`\`\`\n`;
-    }
-
-    const userMessage = `# Audit categories — choose ONLY from these ${flattenedCategories.length} paths\n${categoryListPrompt}\n${contractsSection}\nReturn at most ${maxCategories} matches, each with a path copied verbatim from the list above.`;
-
-    const systemMessage = `You map a Solidity contract onto a security-audit checklist taxonomy.
-
-You are given a contract SKELETON (declarations only — function bodies have been stripped) and a fixed list of audit categories. Select every category whose checklist items would plausibly produce findings for this contract.
-
-Rules:
-1. Each "path" MUST be copied character-for-character from the supplied category list. Never invent, rename, merge, split, abbreviate or re-case a path, and never emit a parent category that is not itself in the list.
-2. Base every match on evidence visible in the skeleton — an import, an inherited base, a state variable, an event, a modifier or a function signature. Do not speculate about what the stripped function bodies might contain.
-3. Prefer the specific over the generic: if a protocol-specific interface is imported, match that integration's category as well as the general one.
-4. Also include cross-cutting categories (access control, external calls, centralisation, low-level operations, compiler-version concerns) when the skeleton shows the corresponding surface area.
-5. Return at most the requested number of categories, ordered most to least confident, with no duplicates.
-6. "reason" is ONE short sentence naming the specific evidence, e.g. "Inherits ERC20 and defines _mint/_burn." Do not restate the category name.
-7. "confidence" is high when the feature is unmistakable, medium when likely, low when plausible but weakly evidenced.
-8. If nothing applies — the file is an interface, a library, or holds no contract — return an empty "matches" array and set "skipped_reason".
-
-Return a JSON object with this structure:
-{
-  "matches": [
-    { "path": "exact category path", "reason": "brief evidence", "confidence": "high|medium|low" }
-  ],
-  "skipped_reason": "optional explanation if no matches"
-}`;
-
-    httpLogger.info({ selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter");
-
-    // Call OpenRouter API with user-selected model
-    const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
-      systemMessage,
-      userMessage,
-      maxTokens: 32768,
-      temperature: 0.7,
-      primaryModel: openRouterModelId, // Use user-selected model with its fallbacks
-      skipValidation: true, // We already validated availability above
-    });
-
-    if (!openRouterResult.success || !openRouterResult.parsed) {
-      httpLogger.error({
-        error: openRouterResult.error,
-        attemptedModels: openRouterResult.attemptedModels
-      }, "OpenRouter request failed");
-      res.writeHead(500, {
-        "Content-Type": "application/json",
-        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
-          status: "settled",
-          network: requirementsWithExtensions.accepts[0]!.network,
-          amount: requirementsWithExtensions.accepts[0]!.amount,
-        })).toString("base64")
-      });
-      res.end(JSON.stringify({
-        error: "AI service request failed",
-        details: openRouterResult.error || "Unknown error",
-        attemptedModels: openRouterResult.attemptedModels,
-        paymentStatus: "settled"
-      }));
-      return;
-    }
-
-    const { parsed, model, tokensUsed } = openRouterResult;
-    const matches = parsed.matches || [];
-    const skippedReason = parsed.skipped_reason;
-
-    httpLogger.info({
-      model,
-      tokensUsed,
-      matchedCategories: matches.length,
-      topCategories: matches.slice(0, 3).map((m: any) => m.path.split('::').pop())
-    }, "Audit checklist matching completed successfully");
-
-    // Generate markdown report
-    const contractName = contractSkeletons.map(c => c.filename).join(', ');
-    const markdownReport = formatAuditReportMarkdown(matches, flattenedCategories, contractName);
+    // Create async job and return immediately
+    const baseUrl = process.env.SERVER_BASE_URL!;
+    const job = createJob("/get_audit_checklist", requestedModel, baseUrl);
 
     const paymentResponseHeader = Buffer.from(JSON.stringify({
       status: "settled",
@@ -1273,16 +1385,30 @@ Return a JSON object with this structure:
       amount: requirementsWithExtensions.accepts[0]!.amount,
     })).toString("base64");
 
-    await sendJsonResponse(res, 200, {
+    // Return immediately with job ID and polling URL
+    await sendJsonResponse(res, 202, {
       success: true,
-      markdown: markdownReport,
-      matchedCategories: matches.length,
-      skippedReason: skippedReason,
-      model: model,
-      tokensUsed: tokensUsed
+      message: "Audit job created. Poll the jobStatusUrl to get results.",
+      jobId: job.id,
+      jobStatusUrl: job.pollingUrl,
+      status: "pending",
+      estimatedCompletionSeconds: 90,
+      instructions: `Poll GET ${job.pollingUrl} every 5-10 seconds until status is 'completed' or 'failed'`
     }, {
       "PAYMENT-RESPONSE": paymentResponseHeader,
     }, req);
+
+    // Process in background (don't await)
+    processAuditChecklistAsync(
+      job.id,
+      sources,
+      maxCategories,
+      requestedModel,
+      openRouterModelId
+    ).catch((error) => {
+      httpLogger.error({ jobId: job.id, error: error.message }, "Background audit processing failed");
+      failJob(job.id, error.message || "Unknown error");
+    });
 
   } catch (error: any) {
     // Payment was settled, but service failed - provide detailed error info
@@ -1977,6 +2103,10 @@ export function startHttpX402Server() {
       } else if (url.pathname === "/health" || url.pathname === "/mcp/x402-http/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: "healthy" }));
+      } else if (url.pathname.startsWith("/job/") && req.method === "GET") {
+        // Job status polling endpoint (FREE, no payment required)
+        const jobId = url.pathname.substring(5); // Extract job ID from /job/:id
+        await handleJobStatus(req, res, jobId);
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({

@@ -61,13 +61,61 @@ contract ExampleToken is ERC20, Ownable {
     }
 }`;
 
+/**
+ * Poll a job endpoint until completion
+ * @param {Function} fetchFn - Fetch function to use (can be x402Fetch or regular fetch)
+ * @param {string} pollingUrl - The /job/:id URL to poll
+ * @param {number} pollIntervalMs - How often to poll (default: 5000ms = 5 seconds)
+ * @param {number} maxAttempts - Maximum polling attempts (default: 120 = 10 minutes)
+ * @returns {Promise<any>} The job result when completed
+ */
+async function pollJobUntilComplete(fetchFn, pollingUrl, pollIntervalMs = 5000, maxAttempts = 120) {
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    attempts++;
+
+    // Poll the job status endpoint (no payment required)
+    const response = await fetchFn(pollingUrl, {
+      method: "GET",
+      headers: {
+        "Accept-Encoding": "gzip"
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Job polling failed: ${response.status} - ${errorText}`);
+    }
+
+    const jobStatus = await response.json();
+
+    if (jobStatus.status === "completed") {
+      console.log(`   ✅ Job completed after ${jobStatus.processingSeconds}s`);
+      return jobStatus.result;
+    } else if (jobStatus.status === "failed") {
+      throw new Error(`Job failed: ${jobStatus.error}`);
+    } else if (jobStatus.status === "pending" || jobStatus.status === "processing") {
+      // Still processing
+      const elapsedSeconds = jobStatus.elapsedSeconds || 0;
+      const dots = ".".repeat((attempts % 3) + 1);
+      process.stdout.write(`\r   ⏳ ${jobStatus.status === "pending" ? "Queued" : "Processing"}${dots} (${elapsedSeconds}s elapsed)`);
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+  }
+
+  throw new Error(`Job polling timed out after ${maxAttempts} attempts`);
+}
+
 async function main() {
-  console.log("🔍 Complete Audit Example");
+  console.log("🔍 Complete Audit Example (with Async Polling)");
   console.log("=".repeat(50));
   console.log();
   console.log("This example demonstrates the full audit workflow:");
-  console.log("1. Get audit checklist with /get_audit_checklist");
-  console.log("2. Perform complete audit with /do_audit");
+  console.log("1. Get audit checklist with /get_audit_checklist (async + polling)");
+  console.log("2. Perform complete audit with /do_audit (async + polling)");
   console.log();
   console.log("Available Models (with automatic fallbacks):");
   console.log("  • DeepSeek: $0.05 + $0.15 = $0.20 total (budget tier)");
@@ -142,7 +190,7 @@ async function main() {
       maxCategories: 12
     };
 
-    console.log("🔄 Making checklist request...");
+    console.log("🔄 Making checklist request (with x402 payment)...");
     const checklistResponse = await x402Fetch(getChecklistEndpoint, {
       method: "POST",
       headers: {
@@ -154,21 +202,37 @@ async function main() {
 
     console.log(`   Response status: ${checklistResponse.status}`);
 
-    // Check for compression
-    const contentEncoding = checklistResponse.headers.get('content-encoding');
-    const contentLength = checklistResponse.headers.get('content-length');
-    if (contentEncoding === 'gzip') {
-      console.log(`   ✅ Response compressed with gzip (size: ${contentLength} bytes)`);
-    } else {
-      console.log(`   ℹ️  Response not compressed (size: ${contentLength || 'unknown'} bytes)`);
-    }
-
     if (!checklistResponse.ok) {
       const errorText = await checklistResponse.text();
       throw new Error(`Checklist request failed: ${checklistResponse.status} - ${errorText}`);
     }
 
-    const checklistResult = await checklistResponse.json();
+    const checklistJobResponse = await checklistResponse.json();
+
+    // The response now contains a job ID and polling URL
+    console.log(`   ✅ Payment settled, job created: ${checklistJobResponse.jobId}`);
+
+    // For local testing, replace the production URL with localhost
+    let pollingUrl = checklistJobResponse.jobStatusUrl;
+    if (pollingUrl.includes('api.remix.live')) {
+      // Extract the path and use local endpoint
+      const jobPath = `/job/${checklistJobResponse.jobId}`;
+      pollingUrl = `http://localhost:8002${jobPath}`;
+      console.log(`   📍 Polling URL (local): ${pollingUrl}`);
+    } else {
+      console.log(`   📍 Polling URL: ${pollingUrl}`);
+    }
+    console.log();
+
+    // Poll the job endpoint until completion (no additional payment required)
+    console.log("⏳ Polling for checklist results...");
+    const checklistResult = await pollJobUntilComplete(
+      fetch,  // Use regular fetch for polling (no payment needed)
+      pollingUrl,
+      5000,  // Poll every 5 seconds
+      120    // Max 10 minutes (120 * 5s = 600s)
+    );
+    console.log();
 
     // Calculate payment based on selected model
     const checklistPrices = {
@@ -206,7 +270,7 @@ async function main() {
       checklist: checklistResult.markdown
     };
 
-    console.log("🔄 Making audit request...");
+    console.log("🔄 Making audit request (with x402 payment)...");
     const auditResponse = await x402Fetch(doAuditEndpoint, {
       method: "POST",
       headers: {
@@ -218,21 +282,49 @@ async function main() {
 
     console.log(`   Response status: ${auditResponse.status}`);
 
-    // Check for compression
-    const auditContentEncoding = auditResponse.headers.get('content-encoding');
-    const auditContentLength = auditResponse.headers.get('content-length');
-    if (auditContentEncoding === 'gzip') {
-      console.log(`   ✅ Response compressed with gzip (size: ${auditContentLength} bytes)`);
-    } else {
-      console.log(`   ℹ️  Response not compressed (size: ${auditContentLength || 'unknown'} bytes)`);
-    }
-
     if (!auditResponse.ok) {
       const errorText = await auditResponse.text();
       throw new Error(`Audit request failed: ${auditResponse.status} - ${errorText}`);
     }
 
-    const auditResult = await auditResponse.json();
+    const auditResponseData = await auditResponse.json();
+
+    let auditResult;
+
+    // Handle both async (202) and sync (200) responses
+    if (auditResponse.status === 202) {
+      // Async mode - poll for results
+      console.log(`   ✅ Payment settled, job created: ${auditResponseData.jobId}`);
+
+      // For local testing, replace the production URL with localhost
+      let auditPollingUrl = auditResponseData.jobStatusUrl;
+      if (auditPollingUrl && auditPollingUrl.includes('api.remix.live')) {
+        // Extract the path and use local endpoint
+        const jobPath = `/job/${auditResponseData.jobId}`;
+        auditPollingUrl = `http://localhost:8002${jobPath}`;
+        console.log(`   📍 Polling URL (local): ${auditPollingUrl}`);
+      } else if (auditPollingUrl) {
+        console.log(`   📍 Polling URL: ${auditPollingUrl}`);
+      }
+      console.log();
+
+      // Poll the job endpoint until completion (no additional payment required)
+      console.log("⏳ Polling for audit results...");
+      auditResult = await pollJobUntilComplete(
+        fetch,  // Use regular fetch for polling (no payment needed)
+        auditPollingUrl,
+        5000,  // Poll every 5 seconds
+        120    // Max 10 minutes (120 * 5s = 600s)
+      );
+      console.log();
+    } else if (auditResponse.status === 200) {
+      // Sync mode - results returned immediately
+      console.log(`   ✅ Payment settled, audit completed synchronously`);
+      console.log();
+      auditResult = auditResponseData;
+    } else {
+      throw new Error(`Unexpected response status: ${auditResponse.status}`);
+    }
 
     // Calculate payment based on selected model
     const auditPrices = {
@@ -299,10 +391,6 @@ async function main() {
     console.log();
     console.log(`Selected Model: ${selectedModel}`);
     console.log();
-    console.log("Compression Status:");
-    console.log(`   Checklist Response: ${contentEncoding === 'gzip' ? '✅ Compressed' : '❌ Not compressed'}`);
-    console.log(`   Audit Response:     ${auditContentEncoding === 'gzip' ? '✅ Compressed' : '❌ Not compressed'}`);
-    console.log();
     console.log("Total Cost:");
     console.log(`   Step 1 (Checklist): ${checklistPrices[selectedModel]} USDC`);
     console.log(`   Step 2 (Audit):     ${auditPrices[selectedModel]} USDC`);
@@ -310,6 +398,8 @@ async function main() {
     console.log(`   Total:              ${totalCost} USDC`);
     console.log();
     console.log("💡 Tips:");
+    console.log("   • Endpoints use async job processing with polling (no timeout issues!)");
+    console.log("   • Payment happens once upfront, then poll the job URL for results");
     console.log("   • Use --model=Sonnet or --model=Fable for higher quality analysis");
     console.log("   • Use --save flag to save the report to a file");
     console.log("   • Each model has 3 automatic fallbacks for reliability");
