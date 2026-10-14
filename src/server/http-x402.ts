@@ -775,8 +775,17 @@ contract Example {
     const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
 
     if (!isValid) {
-      res.writeHead(402, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid or unconfirmed payment" }));
+      res.writeHead(402, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "rejected",
+          reason: "Payment verification or settlement failed"
+        })).toString("base64")
+      });
+      res.end(JSON.stringify({
+        error: "Invalid or unconfirmed payment",
+        details: "Payment authorization failed or settlement was rejected by the payment facilitator"
+      }));
       return;
     }
 
@@ -1110,6 +1119,248 @@ Return a JSON object with this structure:
 }
 
 /**
+ * Background processing function for do_audit
+ * This runs asynchronously after returning the job ID to the client
+ */
+async function processDoAuditAsync(
+  jobId: string,
+  sources: Record<string, { content: string }>,
+  checklist: string,
+  requestedModel: string,
+  openRouterModelId: string
+): Promise<void> {
+  try {
+    markJobAsProcessing(jobId);
+
+    httpLogger.info({ jobId }, "Starting background do_audit processing");
+
+    // Build contract sources section
+    let contractsSection = '';
+    for (const [filename, fileData] of Object.entries(sources)) {
+      if (fileData && typeof fileData === 'object' && 'content' in fileData) {
+        const content = fileData.content;
+        contractsSection += `\n## Contract: ${filename}\n\`\`\`solidity\n${content}\n\`\`\`\n`;
+      }
+    }
+
+    // Build the AI prompt
+    const systemMessage = `You are an expert smart contract security auditor. Your task is to analyze Solidity smart contracts and identify security vulnerabilities, bugs, and code quality issues.
+
+You will be given:
+1. A security audit checklist (markdown format) with categories and items to check
+2. The complete source code of one or more smart contracts
+
+Your job is to:
+1. Carefully analyze each contract against the provided checklist
+2. Identify specific security issues, vulnerabilities, and concerns
+3. Classify each finding by severity: CRITICAL, HIGH, MEDIUM, LOW, or INFORMATIONAL
+4. Provide detailed explanations and remediation steps
+5. Generate a comprehensive audit report in markdown format
+
+Guidelines:
+- Be thorough and specific in your analysis
+- Reference exact line numbers and code snippets when identifying issues
+- Provide clear, actionable remediation steps
+- Focus on real security concerns, not minor style issues
+- If a checklist item is not applicable, skip it
+- Prioritize findings from most to least severe
+
+Return a JSON object with this structure:
+{
+  "findings": [
+    {
+      "title": "Brief title of the issue",
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL",
+      "description": "Detailed explanation of the issue",
+      "location": "ContractName.sol:LineNumber or function name",
+      "code": "Optional code snippet showing the issue",
+      "impact": "What could happen if exploited",
+      "remediation": "How to fix the issue"
+    }
+  ],
+  "summary": "Brief executive summary of the audit",
+  "recommendations": ["General recommendation 1", "General recommendation 2"]
+}`;
+
+    const userMessage = `# Audit Checklist
+
+${checklist}
+
+# Smart Contracts to Audit
+
+${contractsSection}
+
+Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
+
+    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter");
+
+    // Call OpenRouter API with user-selected model
+    interface AuditResponse {
+      findings: any[];
+      summary: string;
+      recommendations: string[];
+    }
+
+    const openRouterResult = await callOpenRouterJSON<AuditResponse>({
+      systemMessage,
+      userMessage,
+      maxTokens: 32768,
+      temperature: 0.7,
+      primaryModel: openRouterModelId,
+      skipValidation: true,
+    });
+
+    if (!openRouterResult.success || !openRouterResult.parsed) {
+      const errorMsg = openRouterResult.error || "Unknown error";
+      httpLogger.error({
+        jobId,
+        error: errorMsg,
+        attemptedModels: openRouterResult.attemptedModels
+      }, "OpenRouter request failed");
+      failJob(jobId, `AI service request failed: ${errorMsg}`);
+      return;
+    }
+
+    const { parsed: auditData, model, tokensUsed } = openRouterResult;
+    const findings = auditData.findings || [];
+    const summary = auditData.summary || "No summary provided";
+    const recommendations = auditData.recommendations || [];
+
+    // Count findings by severity
+    const severityCounts = {
+      critical: findings.filter((f: any) => f.severity === 'CRITICAL').length,
+      high: findings.filter((f: any) => f.severity === 'HIGH').length,
+      medium: findings.filter((f: any) => f.severity === 'MEDIUM').length,
+      low: findings.filter((f: any) => f.severity === 'LOW').length,
+      informational: findings.filter((f: any) => f.severity === 'INFORMATIONAL').length
+    };
+
+    httpLogger.info({
+      jobId,
+      model,
+      tokensUsed,
+      findingsCount: findings.length,
+      severity: severityCounts,
+      topFindings: findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`)
+    }, "Audit completed successfully");
+
+    // Generate markdown audit report
+    const reportLines: string[] = [];
+    reportLines.push('# Complete Security Audit Report');
+    reportLines.push('');
+    reportLines.push(`**Contracts Audited**: ${Object.keys(sources).join(', ')}`);
+    reportLines.push(`**Date**: ${new Date().toISOString()}`);
+    reportLines.push(`**Total Findings**: ${findings.length}`);
+    reportLines.push('');
+    reportLines.push('## Severity Breakdown');
+    reportLines.push('');
+    reportLines.push(`- 🔴 **Critical**: ${severityCounts.critical}`);
+    reportLines.push(`- 🟠 **High**: ${severityCounts.high}`);
+    reportLines.push(`- 🟡 **Medium**: ${severityCounts.medium}`);
+    reportLines.push(`- 🟢 **Low**: ${severityCounts.low}`);
+    reportLines.push(`- ℹ️ **Informational**: ${severityCounts.informational}`);
+    reportLines.push('');
+    reportLines.push('---');
+    reportLines.push('');
+    reportLines.push('## Executive Summary');
+    reportLines.push('');
+    reportLines.push(summary);
+    reportLines.push('');
+    reportLines.push('---');
+    reportLines.push('');
+
+    // Add findings by severity
+    const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
+    const severityEmoji: Record<string, string> = {
+      'CRITICAL': '🔴',
+      'HIGH': '🟠',
+      'MEDIUM': '🟡',
+      'LOW': '🟢',
+      'INFORMATIONAL': 'ℹ️'
+    };
+
+    for (const severity of severityOrder) {
+      const severityFindings = findings.filter((f: any) => f.severity === severity);
+
+      if (severityFindings.length > 0) {
+        reportLines.push(`## ${severityEmoji[severity]} ${severity} Severity Findings`);
+        reportLines.push('');
+
+        for (let i = 0; i < severityFindings.length; i++) {
+          const finding = severityFindings[i];
+
+          const title = finding.title || 'Untitled Finding';
+          const description = finding.description || 'No description provided';
+          const remediation = finding.remediation || 'No remediation provided';
+
+          reportLines.push(`### ${i + 1}. ${title}`);
+          reportLines.push('');
+          reportLines.push(`**Severity**: ${severity}`);
+          if (finding.location) {
+            reportLines.push(`**Location**: ${finding.location}`);
+          }
+          reportLines.push('');
+          reportLines.push('**Description**:');
+          reportLines.push(description);
+          reportLines.push('');
+
+          if (finding.code) {
+            reportLines.push('**Code**:');
+            reportLines.push('```solidity');
+            reportLines.push(String(finding.code));
+            reportLines.push('```');
+            reportLines.push('');
+          }
+
+          if (finding.impact) {
+            reportLines.push('**Impact**:');
+            reportLines.push(String(finding.impact));
+            reportLines.push('');
+          }
+
+          reportLines.push('**Remediation**:');
+          reportLines.push(remediation);
+          reportLines.push('');
+          reportLines.push('---');
+          reportLines.push('');
+        }
+      }
+    }
+
+    // Add recommendations section
+    if (recommendations.length > 0) {
+      reportLines.push('## General Recommendations');
+      reportLines.push('');
+      for (const rec of recommendations) {
+        reportLines.push(`- ${rec}`);
+      }
+      reportLines.push('');
+    }
+
+    reportLines.push('---');
+    reportLines.push('');
+    reportLines.push('*Audit report generated by x402 Audit Service powered by OpenRouter*');
+
+    const markdownReport = reportLines.join('\n');
+
+    // Complete job with results
+    completeJob(jobId, {
+      success: true,
+      markdown: markdownReport,
+      findingsCount: findings.length,
+      severity: severityCounts,
+      model: model,
+      tokensUsed: tokensUsed
+    });
+
+  } catch (error: any) {
+    httpLogger.error({ jobId, error: error.message }, "Background do_audit processing failed");
+    failJob(jobId, error.message || "Unknown error");
+    throw error;
+  }
+}
+
+/**
  * Handle /get_audit_checklist endpoint - OpenRouter AI prompts for smart contract analysis
  */
 async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -1127,14 +1378,28 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
   // Use metadata description which includes pricing info
   const description = GET_AUDIT_CHECKLIST_METADATA.description;
 
-  // Parse request body to get the model parameter
-  // But delay validation until after payment check (x402 compliance)
-  const body = await parseBody(req);
-  const { model: requestedModel } = body;
-
-  // For x402 compliance: Check payment BEFORE validating request parameters
-  // We'll use the model if provided, or default to DeepSeek for the 402 response
+  // For x402 compliance: Check payment BEFORE parsing/validating request body
   const paymentSignature = req.headers["payment-signature"] as string;
+
+  // Only parse body if we need it (either for payment validation or for the 402 response with model-specific pricing)
+  let body: any = {};
+  let requestedModel: string | undefined;
+
+  try {
+    body = await parseBody(req);
+    requestedModel = body.model;
+  } catch (error) {
+    // If body parsing fails and there's no payment, we'll just use default pricing for 402 response
+    // If there IS a payment, we'll catch this error later and return 400
+    if (paymentSignature) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Invalid JSON in request body",
+        hint: "Request body must be valid JSON"
+      }));
+      return;
+    }
+  }
 
   // If no payment, use provided model for pricing (or default to DeepSeek)
   // Model validation will happen after payment verification
@@ -1175,8 +1440,9 @@ async function handleGetAuditChecklist(req: http.IncomingMessage, res: http.Serv
   let openRouterModelId: string | undefined;
   if (paymentSignature) {
     // Payment provided - map model name
+    // requestedModel is guaranteed to be defined here because of validation above
     try {
-      openRouterModelId = mapModelName(requestedModel);
+      openRouterModelId = mapModelName(requestedModel!);
     } catch (error: any) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: error.message }));
@@ -1289,8 +1555,17 @@ contract MyToken {
     const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
 
     if (!isValid) {
-      res.writeHead(402, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid or unconfirmed payment" }));
+      res.writeHead(402, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "rejected",
+          reason: "Payment verification or settlement failed"
+        })).toString("base64")
+      });
+      res.end(JSON.stringify({
+        error: "Invalid or unconfirmed payment",
+        details: "Payment authorization failed or settlement was rejected by the payment facilitator"
+      }));
       return;
     }
 
@@ -1377,7 +1652,7 @@ contract MyToken {
 
     // Create async job and return immediately
     const baseUrl = process.env.SERVER_BASE_URL!;
-    const job = createJob("/get_audit_checklist", requestedModel, baseUrl);
+    const job = createJob("/get_audit_checklist", requestedModel!, baseUrl);
 
     const paymentResponseHeader = Buffer.from(JSON.stringify({
       status: "settled",
@@ -1403,7 +1678,7 @@ contract MyToken {
       job.id,
       sources,
       maxCategories,
-      requestedModel,
+      requestedModel!,
       openRouterModelId
     ).catch((error) => {
       httpLogger.error({ jobId: job.id, error: error.message }, "Background audit processing failed");
@@ -1451,13 +1726,28 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
   // Use metadata description which includes pricing info
   const description = DO_AUDIT_METADATA.description;
 
-  // Parse request body to get the model parameter
-  // But delay validation until after payment check (x402 compliance)
-  const body = await parseBody(req);
-  const { model: requestedModel } = body;
-
-  // For x402 compliance: Check payment BEFORE validating request parameters
+  // For x402 compliance: Check payment BEFORE parsing/validating request body
   const paymentSignature = req.headers["payment-signature"] as string;
+
+  // Only parse body if we need it (either for payment validation or for the 402 response with model-specific pricing)
+  let body: any = {};
+  let requestedModel: string | undefined;
+
+  try {
+    body = await parseBody(req);
+    requestedModel = body.model;
+  } catch (error) {
+    // If body parsing fails and there's no payment, we'll just use default pricing for 402 response
+    // If there IS a payment, we'll catch this error later and return 400
+    if (paymentSignature) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        error: "Invalid JSON in request body",
+        hint: "Request body must be valid JSON"
+      }));
+      return;
+    }
+  }
 
   // If no payment, use provided model for pricing (or default to DeepSeek)
   let modelForPricing: "DeepSeek" | "Sonnet" | "Fable" = "DeepSeek";
@@ -1496,8 +1786,9 @@ async function handleDoAudit(req: http.IncomingMessage, res: http.ServerResponse
   let openRouterModelId: string | undefined;
   if (paymentSignature) {
     // Payment provided - map model name
+    // requestedModel is guaranteed to be defined here because of validation above
     try {
-      openRouterModelId = mapModelName(requestedModel);
+      openRouterModelId = mapModelName(requestedModel!);
     } catch (error: any) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: error.message }));
@@ -1615,8 +1906,17 @@ contract MyToken {
     const isValid = await verifyPayment(payment, requirementsWithExtensions, resource);
 
     if (!isValid) {
-      res.writeHead(402, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid or unconfirmed payment" }));
+      res.writeHead(402, {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
+          status: "rejected",
+          reason: "Payment verification or settlement failed"
+        })).toString("base64")
+      });
+      res.end(JSON.stringify({
+        error: "Invalid or unconfirmed payment",
+        details: "Payment authorization failed or settlement was rejected by the payment facilitator"
+      }));
       return;
     }
 
@@ -1710,236 +2010,16 @@ contract MyToken {
     httpLogger.info({
       contractFiles: Object.keys(sources),
       checklistLength: checklist.length
-    }, "Processing complete audit request");
+    }, "Processing complete audit request (async mode)");
 
     // At this point, openRouterModelId must be defined (validated above)
     if (!openRouterModelId) {
       throw new Error("openRouterModelId should have been validated after payment");
     }
 
-    // Build contract sources section
-    let contractsSection = '';
-    for (const [filename, fileData] of Object.entries(sources)) {
-      if (fileData && typeof fileData === 'object' && 'content' in fileData) {
-        const content = (fileData as any).content;
-        contractsSection += `\n## Contract: ${filename}\n\`\`\`solidity\n${content}\n\`\`\`\n`;
-      }
-    }
-
-    // Build the AI prompt
-    const systemMessage = `You are an expert smart contract security auditor. Your task is to analyze Solidity smart contracts and identify security vulnerabilities, bugs, and code quality issues.
-
-You will be given:
-1. A security audit checklist (markdown format) with categories and items to check
-2. The complete source code of one or more smart contracts
-
-Your job is to:
-1. Carefully analyze each contract against the provided checklist
-2. Identify specific security issues, vulnerabilities, and concerns
-3. Classify each finding by severity: CRITICAL, HIGH, MEDIUM, LOW, or INFORMATIONAL
-4. Provide detailed explanations and remediation steps
-5. Generate a comprehensive audit report in markdown format
-
-Guidelines:
-- Be thorough and specific in your analysis
-- Reference exact line numbers and code snippets when identifying issues
-- Provide clear, actionable remediation steps
-- Focus on real security concerns, not minor style issues
-- If a checklist item is not applicable, skip it
-- Prioritize findings from most to least severe
-
-Return a JSON object with this structure:
-{
-  "findings": [
-    {
-      "title": "Brief title of the issue",
-      "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFORMATIONAL",
-      "description": "Detailed explanation of the issue",
-      "location": "ContractName.sol:LineNumber or function name",
-      "code": "Optional code snippet showing the issue",
-      "impact": "What could happen if exploited",
-      "remediation": "How to fix the issue"
-    }
-  ],
-  "summary": "Brief executive summary of the audit",
-  "recommendations": ["General recommendation 1", "General recommendation 2"]
-}`;
-
-    const userMessage = `# Audit Checklist
-
-${checklist}
-
-# Smart Contracts to Audit
-
-${contractsSection}
-
-Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
-
-    httpLogger.info({ selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter");
-
-    // Call OpenRouter API with user-selected model
-    interface AuditResponse {
-      findings: any[];
-      summary: string;
-      recommendations: string[];
-    }
-
-    const openRouterResult = await callOpenRouterJSON<AuditResponse>({
-      systemMessage,
-      userMessage,
-      maxTokens: 32768,
-      temperature: 0.7,
-      primaryModel: openRouterModelId, // Use user-selected model with its fallbacks
-      skipValidation: true, // We already validated availability above
-    });
-
-    if (!openRouterResult.success || !openRouterResult.parsed) {
-      httpLogger.error({
-        error: openRouterResult.error,
-        attemptedModels: openRouterResult.attemptedModels
-      }, "OpenRouter request failed");
-      res.writeHead(500, {
-        "Content-Type": "application/json",
-        "PAYMENT-RESPONSE": Buffer.from(JSON.stringify({
-          status: "settled",
-          network: requirementsWithExtensions.accepts[0]!.network,
-          amount: requirementsWithExtensions.accepts[0]!.amount,
-        })).toString("base64")
-      });
-      res.end(JSON.stringify({
-        error: "AI service request failed",
-        details: openRouterResult.error || "Unknown error",
-        attemptedModels: openRouterResult.attemptedModels,
-        paymentStatus: "settled"
-      }));
-      return;
-    }
-
-    const { parsed: auditData, model, tokensUsed } = openRouterResult;
-    const findings = auditData.findings || [];
-    const summary = auditData.summary || "No summary provided";
-    const recommendations = auditData.recommendations || [];
-
-    // Count findings by severity
-    const severityCounts = {
-      critical: findings.filter((f: any) => f.severity === 'CRITICAL').length,
-      high: findings.filter((f: any) => f.severity === 'HIGH').length,
-      medium: findings.filter((f: any) => f.severity === 'MEDIUM').length,
-      low: findings.filter((f: any) => f.severity === 'LOW').length,
-      informational: findings.filter((f: any) => f.severity === 'INFORMATIONAL').length
-    };
-
-    httpLogger.info({
-      model,
-      tokensUsed,
-      findingsCount: findings.length,
-      severity: severityCounts,
-      topFindings: findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`)
-    }, "Audit completed successfully");
-
-    httpLogger.info({ endpoint: '/do_audit', stage: 'generating_markdown' }, "Starting markdown report generation");
-
-    // Generate markdown audit report
-    const reportLines: string[] = [];
-    reportLines.push('# Complete Security Audit Report');
-    reportLines.push('');
-    reportLines.push(`**Contracts Audited**: ${Object.keys(sources).join(', ')}`);
-    reportLines.push(`**Date**: ${new Date().toISOString()}`);
-    reportLines.push(`**Total Findings**: ${findings.length}`);
-    reportLines.push('');
-    reportLines.push('## Severity Breakdown');
-    reportLines.push('');
-    reportLines.push(`- 🔴 **Critical**: ${severityCounts.critical}`);
-    reportLines.push(`- 🟠 **High**: ${severityCounts.high}`);
-    reportLines.push(`- 🟡 **Medium**: ${severityCounts.medium}`);
-    reportLines.push(`- 🟢 **Low**: ${severityCounts.low}`);
-    reportLines.push(`- ℹ️ **Informational**: ${severityCounts.informational}`);
-    reportLines.push('');
-    reportLines.push('---');
-    reportLines.push('');
-    reportLines.push('## Executive Summary');
-    reportLines.push('');
-    reportLines.push(summary);
-    reportLines.push('');
-    reportLines.push('---');
-    reportLines.push('');
-
-    // Add findings by severity
-    const severityOrder = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
-    const severityEmoji: Record<string, string> = {
-      'CRITICAL': '🔴',
-      'HIGH': '🟠',
-      'MEDIUM': '🟡',
-      'LOW': '🟢',
-      'INFORMATIONAL': 'ℹ️'
-    };
-
-    for (const severity of severityOrder) {
-      const severityFindings = findings.filter((f: any) => f.severity === severity);
-
-      if (severityFindings.length > 0) {
-        reportLines.push(`## ${severityEmoji[severity]} ${severity} Severity Findings`);
-        reportLines.push('');
-
-        for (let i = 0; i < severityFindings.length; i++) {
-          const finding = severityFindings[i];
-
-          // Safely handle potentially missing or undefined fields
-          const title = finding.title || 'Untitled Finding';
-          const description = finding.description || 'No description provided';
-          const remediation = finding.remediation || 'No remediation provided';
-
-          reportLines.push(`### ${i + 1}. ${title}`);
-          reportLines.push('');
-          reportLines.push(`**Severity**: ${severity}`);
-          if (finding.location) {
-            reportLines.push(`**Location**: ${finding.location}`);
-          }
-          reportLines.push('');
-          reportLines.push('**Description**:');
-          reportLines.push(description);
-          reportLines.push('');
-
-          if (finding.code) {
-            reportLines.push('**Code**:');
-            reportLines.push('```solidity');
-            reportLines.push(String(finding.code));
-            reportLines.push('```');
-            reportLines.push('');
-          }
-
-          if (finding.impact) {
-            reportLines.push('**Impact**:');
-            reportLines.push(String(finding.impact));
-            reportLines.push('');
-          }
-
-          reportLines.push('**Remediation**:');
-          reportLines.push(remediation);
-          reportLines.push('');
-          reportLines.push('---');
-          reportLines.push('');
-        }
-      }
-    }
-
-    httpLogger.info({ endpoint: '/do_audit', stage: 'markdown_complete', reportLength: reportLines.length }, "Markdown report generation complete");
-
-    // Add recommendations section
-    if (recommendations.length > 0) {
-      reportLines.push('## General Recommendations');
-      reportLines.push('');
-      for (const rec of recommendations) {
-        reportLines.push(`- ${rec}`);
-      }
-      reportLines.push('');
-    }
-
-    reportLines.push('---');
-    reportLines.push('');
-    reportLines.push('*Audit report generated by x402 Audit Service powered by OpenRouter*');
-
-    const markdownReport = reportLines.join('\n');
+    // Create async job and return immediately
+    const baseUrl = process.env.SERVER_BASE_URL!;
+    const job = createJob("/do_audit", requestedModel!, baseUrl);
 
     const paymentResponseHeader = Buffer.from(JSON.stringify({
       status: "settled",
@@ -1947,44 +2027,30 @@ Please perform a complete security audit of the above contracts against the prov
       amount: requirementsWithExtensions.accepts[0]!.amount,
     })).toString("base64");
 
-    // Prepare response object
-    const responseData = {
+    // Return immediately with job ID and polling URL
+    await sendJsonResponse(res, 202, {
       success: true,
-      markdown: markdownReport,
-      findingsCount: findings.length,
-      severity: severityCounts,
-      model: model,
-      tokensUsed: tokensUsed
-    };
+      message: "Audit job created. Poll the jobStatusUrl to get results.",
+      jobId: job.id,
+      jobStatusUrl: job.pollingUrl,
+      status: "pending",
+      estimatedCompletionSeconds: 120,
+      instructions: `Poll GET ${job.pollingUrl} every 5-10 seconds until status is 'completed' or 'failed'`
+    }, {
+      "PAYMENT-RESPONSE": paymentResponseHeader,
+    }, req);
 
-    httpLogger.info({
-      endpoint: '/do_audit',
-      status: 200,
-      findingsCount: findings.length,
-      markdownLength: markdownReport.length,
-      responseEnded: res.writableEnded
-    }, "Sending successful audit response");
-
-    // Check if response was already sent (duplicate request handling)
-    if (res.writableEnded) {
-      httpLogger.error({ endpoint: '/do_audit' }, "Cannot send response - response already ended");
-      return;
-    }
-
-    try {
-      await sendJsonResponse(res, 200, responseData, {
-        "PAYMENT-RESPONSE": paymentResponseHeader,
-      }, req);
-
-      httpLogger.info({ endpoint: '/do_audit' }, "Response sent successfully");
-    } catch (writeError: any) {
-      httpLogger.error({
-        endpoint: '/do_audit',
-        error: writeError.message,
-        stack: writeError.stack
-      }, "Failed to write response");
-      // Don't throw - response might have been partially sent
-    }
+    // Process in background (don't await)
+    processDoAuditAsync(
+      job.id,
+      sources,
+      checklist,
+      requestedModel!,
+      openRouterModelId
+    ).catch((error) => {
+      httpLogger.error({ jobId: job.id, error: error.message }, "Background do_audit processing failed");
+      failJob(job.id, error.message || "Unknown error");
+    });
 
   } catch (error: any) {
     // Payment was settled, but service failed - provide detailed error info
@@ -2061,9 +2127,6 @@ function handleInfo(_req: http.IncomingMessage, res: http.ServerResponse) {
   }));
 }
 
-/**
- * Create and start the HTTP x402 server
- */
 export function startHttpX402Server() {
   const PAY_TO_ADDRESS = process.env.PAY_TO_ADDRESS;
 
