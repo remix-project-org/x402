@@ -68,7 +68,7 @@ HTTP server for Bazaar discovery:
   - Validation instructions
   - Environment variables for discovery
 
-#### `API_REFERENCE.md`
+#### `MCP_API_REFERENCE.md` (formerly API_REFERENCE.md)
 - Added discovery notice at the top
 - Added "Discovery Endpoint" to Table of Contents
 - New "Discovery Endpoint" section with:

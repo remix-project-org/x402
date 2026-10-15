@@ -403,8 +403,9 @@ The Agentic Wallet is ideal for users who want a simpler, more secure setup with
 ## Additional Resources
 
 - **[CLAUDE_AGENTIC_WALLET_GUIDE.md](CLAUDE_AGENTIC_WALLET_GUIDE.md)** - Using Coinbase Agentic Wallet (no private keys!)
-- **[AGENTIC_WALLET_INTEGRATION.md](AGENTIC_WALLET_INTEGRATION.md)** - Agentic Wallet CLI usage
-- **[MCP_USAGE.md](MCP_USAGE.md)** - MCP server programmatic usage
-- **[API_REFERENCE.md](API_REFERENCE.md)** - Complete tool specifications
+- **[CLI_AGENTIC_WALLET_GUIDE.md](CLI_AGENTIC_WALLET_GUIDE.md)** - Agentic Wallet CLI usage
+- **[MCP_API_REFERENCE.md](MCP_API_REFERENCE.md)** - MCP server programmatic usage
+- **[MCP_API_REFERENCE.md](MCP_API_REFERENCE.md)** - Complete MCP tool specifications
+- **[HTTP_API_REFERENCE.md](HTTP_API_REFERENCE.md)** - HTTP REST endpoint specifications
 - **[README.md](README.md)** - Architecture and implementation details
 - **[GitHub Issues](https://github.com/remix-project-org/x402/issues)** - Support

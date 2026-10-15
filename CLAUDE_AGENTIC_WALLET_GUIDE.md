@@ -544,9 +544,9 @@ Please:
 
 ## Related Documentation
 
-- **[Agentic Wallet CLI Guide](AGENTIC_WALLET_INTEGRATION.md)** - Use the wallet from command line
-- **[HTTP x402 Endpoints](HTTP_X402_ENDPOINTS.md)** - Direct API usage
-- **[MCP Usage Guide](MCP_USAGE.md)** - Using the MCP server programmatically
-- **[API Reference](API_REFERENCE.md)** - Complete API specifications
+- **[Agentic Wallet CLI Guide](CLI_AGENTIC_WALLET_GUIDE.md)** - Use the wallet from command line
+- **[HTTP API Reference](HTTP_API_REFERENCE.md)** - Direct HTTP REST API usage
+- **[MCP Usage Guide](MCP_API_REFERENCE.md)** - Using the MCP server programmatically
+- **[MCP API Reference](MCP_API_REFERENCE.md)** - Complete MCP tools API specifications
 
 

@@ -21,30 +21,33 @@ This is a **multi-protocol server implementation** that provides paid Solidity d
 ### 📖 Usage Guides - Choose Your Server Type
 
 **For AI Agents (Claude, etc.):**
-- 📱 **[MCP Server Usage Guide →](MCP_USAGE.md)**
+- 📱 **[MCP Server Usage Guide →](MCP_API_REFERENCE.md)**
   - Model Context Protocol for AI agents
   - Ampersend SDK payment handling
   - Claude Desktop/CLI integration
   - Clients pay gas fees
 
 **For Web Applications & REST APIs:**
-- 🌐 **[HTTP x402 Server Usage Guide →](HTTP_X402_USAGE.md)**
+- 🌐 **[HTTP API Reference →](HTTP_API_REFERENCE.md)**
   - Standard HTTP REST endpoints
   - Facilitator-based payment settlement
   - **No gas fees for clients!** ✅
   - Production-ready with CDP
 
 **For Coinbase Agentic Wallet Users:**
-- 💰 **[Agentic Wallet Integration Guide →](AGENTIC_WALLET_INTEGRATION.md)**
-  - Use `awal` CLI with x402 services
-  - AI agent integration (Claude Desktop)
+- 💰 **[Claude Agentic Wallet Guide →](CLAUDE_AGENTIC_WALLET_GUIDE.md)**
+  - Use Agentic Wallet with Claude Desktop/Code
+  - AI agent integration
   - Automated payment handling
   - **No gas fees for clients!** ✅
+- 🔧 **[Agentic Wallet CLI Guide →](CLI_AGENTIC_WALLET_GUIDE.md)**
+  - Use `awal` CLI with x402 services
+  - Command-line usage examples
 
 ### 📚 Reference Documentation
-- 🖥️ **[Claude Setup Guide](CLAUDE_SETUP.md)** - Connect to Claude Desktop or Claude Code CLI
-- 📘 **[API Reference](API_REFERENCE.md)** - Complete API specs for all 4 tools
-- 🔧 **[HTTP Endpoints](HTTP_X402_ENDPOINTS.md)** - HTTP x402 endpoint specifications
+- 🖥️ **[Claude Self-Managed Wallet Guide](CLAUDE_SELF_MANAGED_WALLET.md)** - Connect to Claude Desktop or Claude Code CLI
+- 📘 **[MCP API Reference](MCP_API_REFERENCE.md)** - Complete MCP API documentation
+- 🔧 **[HTTP API Reference](HTTP_API_REFERENCE.md)** - Complete HTTP REST endpoint specifications
 
 ## Which Server Should I Use?
 
@@ -56,7 +59,7 @@ This is a **multi-protocol server implementation** that provides paid Solidity d
 | **Payment Library** | Ampersend SDK | @x402/fetch |
 | **Gas Fees** | Client pays | Facilitator pays ✅ |
 | **Facilitator** | Not used | CDP or x402.org |
-| **Setup** | [MCP_USAGE.md](MCP_USAGE.md) | [HTTP_X402_USAGE.md](HTTP_X402_USAGE.md) |
+| **Setup** | [MCP_API_REFERENCE.md](MCP_API_REFERENCE.md) | [HTTP_API_REFERENCE.md](HTTP_API_REFERENCE.md) |
 
 **Choose MCP** if you're integrating with Claude Desktop/CLI or building AI agents.
 **Choose HTTP** if you're building web applications or want NO gas fees for clients.
@@ -137,8 +140,8 @@ Optional (for logging):
 - `LOG_LEVEL` - Set log verbosity: `debug`, `info`, `warn`, `error` (default: `debug` in dev, `info` in production)
 
 > **Detailed configuration guides:**
-> - HTTP x402 Server: See [HTTP_X402_USAGE.md](HTTP_X402_USAGE.md) for facilitator configuration
-> - MCP Server: See [MCP_USAGE.md](MCP_USAGE.md) for wallet setup
+> - HTTP x402 Server: See [HTTP_API_REFERENCE.md](HTTP_API_REFERENCE.md) for facilitator configuration
+> - MCP Server: See [MCP_API_REFERENCE.md](MCP_API_REFERENCE.md) for wallet setup
 
 ### Logging
 
@@ -244,9 +247,8 @@ This server supports two payment methods depending on which server you use:
 - **Best for**: Web applications, REST APIs
 
 > 📖 **Detailed payment flows:**
-> - [MCP_USAGE.md](MCP_USAGE.md) - MCP server payment flow
-> - [HTTP_X402_USAGE.md](HTTP_X402_USAGE.md) - HTTP server with facilitator
-> - [API_REFERENCE.md](API_REFERENCE.md) - Complete API specifications
+> - [MCP_API_REFERENCE.md](MCP_API_REFERENCE.md) - MCP server payment flow and complete API
+> - [HTTP_API_REFERENCE.md](HTTP_API_REFERENCE.md) - HTTP server with facilitator
 
 ## Bazaar Discovery & Indexing
 

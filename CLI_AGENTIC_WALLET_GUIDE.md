@@ -265,5 +265,4 @@ npx awal config --session-limit 1.00 # Per session
 
 - **Agentic Wallet Docs**: https://docs.cdp.coinbase.com/agentic-wallet/cli/welcome
 - **Service Marketplace**: https://agentic.market/services/api-remix-live
-- **Endpoint Details**: [HTTP_X402_ENDPOINTS.md](HTTP_X402_ENDPOINTS.md)
-- **Programmatic Usage**: [HTTP_X402_USAGE.md](HTTP_X402_USAGE.md)
+- **HTTP API Reference**: [HTTP_API_REFERENCE.md](HTTP_API_REFERENCE.md) - Complete HTTP endpoint documentation
