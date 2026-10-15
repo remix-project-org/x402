@@ -291,7 +291,7 @@ Generate AI-powered audit checklist for smart contracts with x402 payment.
 - **Sonnet** (Premium): 0.15 USDC - High quality analysis
 - **Fable** (Ultra): 0.30 USDC - Premium deep analysis
 
-**Description**: Uses OpenRouter AI to analyze smart contracts and match them against a comprehensive security audit checklist. Returns relevant security categories in markdown format. Supports 3 AI models with automatic fallbacks for reliability.
+**Description**: Uses OpenRouter AI to analyze smart contracts and match them against a comprehensive security audit checklist. This endpoint returns immediately with a polling URL for asynchronous processing. Supports 3 AI models with automatic fallbacks for reliability.
 
 **Request Body**:
 ```json
@@ -311,18 +311,66 @@ Generate AI-powered audit checklist for smart contracts with x402 payment.
 - `sources` (required): Map of filename to source code (same format as `/compile`)
 - `maxCategories` (optional): Maximum number of audit categories to match (default: 12, max: 20)
 
-**Response (200 OK)**:
+**Initial Response (202 Accepted)**:
 ```json
 {
   "success": true,
-  "markdown": "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n- **Access Control** 🔴 `high`\n  - Public mint function without access control\n\n- **Integer Overflow** 🟡 `medium`\n  - Uses mapping for balances\n\n...",
-  "matchedCategories": 5,
-  "model": "openrouter/auto-beta",
-  "tokensUsed": 3456
+  "message": "Audit job created. Poll the jobStatusUrl to get results.",
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "jobStatusUrl": "https://api.remix.live/mcp/x402-http/job/550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "estimatedCompletionSeconds": 90,
+  "instructions": "Poll GET https://api.remix.live/mcp/x402-http/job/550e8400-e29b-41d4-a716-446655440000 every 5-10 seconds until status is 'completed' or 'failed'"
 }
 ```
 
-**Response Fields**:
+**Initial Response Fields**:
+- `success`: Boolean indicating job creation success
+- `message`: Instruction message
+- `jobId`: Unique job identifier
+- `jobStatusUrl`: URL to poll for job status and results
+- `status`: Current job status ("pending")
+- `estimatedCompletionSeconds`: Estimated time to completion
+- `instructions`: How to poll for results
+
+### GET /job/:jobId
+
+Poll for audit job status and results (no payment required - this endpoint is free).
+
+**Polling Response (while processing)**:
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "endpoint": "/get_audit_checklist",
+  "model": "DeepSeek",
+  "createdAt": "2026-10-15T10:30:00.000Z",
+  "message": "Job is processing",
+  "pollingUrl": "https://api.remix.live/mcp/x402-http/job/550e8400-e29b-41d4-a716-446655440000",
+  "instructions": "Continue polling this URL every 5-10 seconds"
+}
+```
+
+**Final Response (when completed)**:
+```json
+{
+  "jobId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "endpoint": "/get_audit_checklist",
+  "model": "DeepSeek",
+  "createdAt": "2026-10-15T10:30:00.000Z",
+  "completedAt": "2026-10-15T10:31:30.000Z",
+  "result": {
+    "success": true,
+    "markdown": "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol\n\n## Summary\n\n- **ERC20::Token Mechanics** 🔴 `high`\n  - Inherits ERC20 and defines mint function\n\n- **Access Control** 🔴 `high`\n  - Public mint function without access control\n\n- **Integer Overflow** 🟡 `medium`\n  - Uses mapping for balances\n\n...",
+    "matchedCategories": 5,
+    "model": "openrouter/auto-beta",
+    "tokensUsed": 3456
+  }
+}
+```
+
+**Result Fields**:
 - `success`: Boolean indicating success
 - `markdown`: Complete audit checklist report in markdown format
 - `matchedCategories`: Number of categories matched to the contract
@@ -338,7 +386,7 @@ Perform complete AI-powered security audit with detailed findings and recommenda
 - **Sonnet** (Premium): 0.25 USDC - High quality analysis
 - **Fable** (Ultra): 0.70 USDC - Premium deep analysis
 
-**Description**: Takes smart contract sources and an audit checklist (from `/get_audit_checklist` or custom), analyzes the code against all checklist items, and generates a comprehensive security audit report with severity-classified findings. Supports 3 AI models with automatic fallbacks for reliability.
+**Description**: Takes smart contract sources and an audit checklist (from `/get_audit_checklist` or custom), analyzes the code against all checklist items, and generates a comprehensive security audit report with severity-classified findings. This endpoint returns immediately with a polling URL for asynchronous processing. Supports 3 AI models with automatic fallbacks for reliability.
 
 **Request Body**:
 ```json
@@ -358,25 +406,69 @@ Perform complete AI-powered security audit with detailed findings and recommenda
 - `sources` (required): Map of filename to source code
 - `checklist` (required): Audit checklist in markdown format (typically from `/get_audit_checklist`)
 
-**Response (200 OK)**:
+**Initial Response (202 Accepted)**:
 ```json
 {
   "success": true,
-  "markdown": "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\nThis audit identified 5 security findings across the MyToken smart contract...\n\n## Findings\n\n### 1. Unrestricted Minting Function (HIGH)\n\n**Severity**: HIGH\n**Category**: Access Control\n\n**Description**: The `mint` function is public and can be called by anyone...\n\n**Recommendation**: Add access control using OpenZeppelin's Ownable...\n\n...",
-  "findingsCount": 5,
-  "severity": {
-    "critical": 0,
-    "high": 2,
-    "medium": 2,
-    "low": 1,
-    "informational": 0
-  },
-  "model": "openrouter/auto-beta",
-  "tokensUsed": 5678
+  "message": "Audit job created. Poll the jobStatusUrl to get results.",
+  "jobId": "650e8400-e29b-41d4-a716-446655440001",
+  "jobStatusUrl": "https://api.remix.live/mcp/x402-http/job/650e8400-e29b-41d4-a716-446655440001",
+  "status": "pending",
+  "estimatedCompletionSeconds": 120,
+  "instructions": "Poll GET https://api.remix.live/mcp/x402-http/job/650e8400-e29b-41d4-a716-446655440001 every 5-10 seconds until status is 'completed' or 'failed'"
 }
 ```
 
-**Response Fields**:
+**Initial Response Fields**:
+- `success`: Boolean indicating job creation success
+- `message`: Instruction message
+- `jobId`: Unique job identifier
+- `jobStatusUrl`: URL to poll for job status and results
+- `status`: Current job status ("pending")
+- `estimatedCompletionSeconds`: Estimated time to completion
+- `instructions`: How to poll for results
+
+**Polling Response (while processing)** - Poll the `jobStatusUrl`:
+```json
+{
+  "jobId": "650e8400-e29b-41d4-a716-446655440001",
+  "status": "processing",
+  "endpoint": "/do_audit",
+  "model": "DeepSeek",
+  "createdAt": "2026-10-15T10:30:00.000Z",
+  "message": "Job is processing",
+  "pollingUrl": "https://api.remix.live/mcp/x402-http/job/650e8400-e29b-41d4-a716-446655440001",
+  "instructions": "Continue polling this URL every 5-10 seconds"
+}
+```
+
+**Final Response (when completed)**:
+```json
+{
+  "jobId": "650e8400-e29b-41d4-a716-446655440001",
+  "status": "completed",
+  "endpoint": "/do_audit",
+  "model": "DeepSeek",
+  "createdAt": "2026-10-15T10:30:00.000Z",
+  "completedAt": "2026-10-15T10:32:00.000Z",
+  "result": {
+    "success": true,
+    "markdown": "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\nThis audit identified 5 security findings across the MyToken smart contract...\n\n## Findings\n\n### 1. Unrestricted Minting Function (HIGH)\n\n**Severity**: HIGH\n**Category**: Access Control\n\n**Description**: The `mint` function is public and can be called by anyone...\n\n**Recommendation**: Add access control using OpenZeppelin's Ownable...\n\n...",
+    "findingsCount": 5,
+    "severity": {
+      "critical": 0,
+      "high": 2,
+      "medium": 2,
+      "low": 1,
+      "informational": 0
+    },
+    "model": "openrouter/auto-beta",
+    "tokensUsed": 5678
+  }
+}
+```
+
+**Result Fields**:
 - `success`: Boolean indicating success
 - `markdown`: Complete security audit report in markdown format
 - `findingsCount`: Total number of security findings
@@ -391,19 +483,56 @@ Perform complete AI-powered security audit with detailed findings and recommenda
 
 **Complete Workflow Example**:
 ```bash
-# Step 1: Get audit checklist with DeepSeek (0.05 USDC)
-curl -X POST http://localhost:8002/get_audit_checklist \
+# Step 1: Get audit checklist with DeepSeek (0.05 USDC) - Returns immediately with polling URL
+CHECKLIST_RESPONSE=$(curl -X POST http://localhost:8002/get_audit_checklist \
   -H "Content-Type: application/json" \
   -H "Payment-Signature: <payment1>" \
-  -d '{"model": "DeepSeek", "sources": {"MyToken.sol": {"content": "..."}}}' \
-  > checklist.json
+  -d '{"model": "DeepSeek", "sources": {"MyToken.sol": {"content": "..."}}}')
 
-# Step 2: Run full audit with checklist using DeepSeek (0.15 USDC)
-curl -X POST http://localhost:8002/do_audit \
+# Extract polling URL from response
+CHECKLIST_POLL_URL=$(echo $CHECKLIST_RESPONSE | jq -r .jobStatusUrl)
+
+# Step 2: Poll for checklist results (every 5-10 seconds)
+while true; do
+  CHECKLIST_STATUS=$(curl -s $CHECKLIST_POLL_URL)
+  STATUS=$(echo $CHECKLIST_STATUS | jq -r .status)
+
+  if [ "$STATUS" = "completed" ]; then
+    echo $CHECKLIST_STATUS | jq -r .result.markdown > checklist.md
+    break
+  elif [ "$STATUS" = "failed" ]; then
+    echo "Checklist generation failed"
+    exit 1
+  fi
+
+  sleep 5
+done
+
+# Step 3: Run full audit with checklist using DeepSeek (0.15 USDC) - Returns immediately with polling URL
+AUDIT_RESPONSE=$(curl -X POST http://localhost:8002/do_audit \
   -H "Content-Type: application/json" \
   -H "Payment-Signature: <payment2>" \
-  -d "{\"model\": \"DeepSeek\", \"sources\": {\"MyToken.sol\": {\"content\": \"...\"}}, \"checklist\": \"$(cat checklist.json | jq -r .markdown)\"}" \
-  > audit_report.json
+  -d "{\"model\": \"DeepSeek\", \"sources\": {\"MyToken.sol\": {\"content\": \"...\"}}, \"checklist\": \"$(cat checklist.md)\"}")
+
+# Extract polling URL from response
+AUDIT_POLL_URL=$(echo $AUDIT_RESPONSE | jq -r .jobStatusUrl)
+
+# Step 4: Poll for audit results (every 5-10 seconds)
+while true; do
+  AUDIT_STATUS=$(curl -s $AUDIT_POLL_URL)
+  STATUS=$(echo $AUDIT_STATUS | jq -r .status)
+
+  if [ "$STATUS" = "completed" ]; then
+    echo $AUDIT_STATUS | jq -r .result.markdown > audit_report.md
+    echo "Audit complete! Report saved to audit_report.md"
+    break
+  elif [ "$STATUS" = "failed" ]; then
+    echo "Audit failed"
+    exit 1
+  fi
+
+  sleep 5
+done
 
 # Total cost with DeepSeek: 0.20 USDC
 # Total cost with Sonnet: 0.40 USDC (0.15 + 0.25)
@@ -451,6 +580,27 @@ Get service information (no payment required).
   "payTo": "0x..."
 }
 ```
+
+### GET /job/:jobId
+
+Poll for audit job status and results (no payment required).
+
+**Description**: This endpoint is used to check the status and retrieve results of asynchronous audit jobs created by `/get_audit_checklist` and `/do_audit` endpoints. No payment is required for polling.
+
+**Path Parameters**:
+- `jobId` (required): The unique job identifier returned when creating an audit job
+
+**Response Statuses**:
+- `200 OK`: Job status returned (pending, processing, completed, or failed)
+- `404 Not Found`: Job ID not found or expired
+
+**Response Examples**: See the polling response examples in the `/get_audit_checklist` and `/do_audit` sections above.
+
+**Notes**:
+- Jobs expire after 10 minutes if not completed
+- Completed job results are retained for 5 minutes
+- Poll every 5-10 seconds for best results
+- After retrieving completed results, the job may be deleted
 
 ### GET /health
 

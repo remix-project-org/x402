@@ -303,7 +303,7 @@ Claude will:
 
 **Cost**: $0.05-0.30 USDC per checklist (by model: DeepSeek/Sonnet/Fable)
 
-Get a customized security audit checklist tailored to your contract's structure and patterns.
+Get a customized security audit checklist tailored to your contract's structure and patterns. This process returns immediately with a polling URL, then Claude monitors the job until completion.
 
 #### Example: Generate Custom Audit Checklist
 
@@ -331,10 +331,11 @@ contract ExampleToken is ERC20, Ownable {
 ```
 
 Claude will:
-1. Analyze your contract structure
-2. Generate relevant security checklist items
-3. Pay $0.05 USDC (DeepSeek), $0.15 (Sonnet), or $0.30 (Fable) automatically
-4. Return a customized checklist in markdown format
+1. Submit your contract for analysis
+2. Pay $0.05 USDC (DeepSeek), $0.15 (Sonnet), or $0.30 (Fable) automatically
+3. Receive a polling URL and job ID
+4. Poll the job status every 5-10 seconds (estimated 90 seconds)
+5. Return the completed checklist in markdown format
 
 **Model Options:**
 - **DeepSeek** (Budget): $0.05 USDC - Fast and cost-effective
@@ -347,11 +348,17 @@ Claude will:
 - Industry best practices for similar contracts
 - Number of matched categories and tokens used
 
+**How it works:**
+- The endpoint returns immediately (202 Accepted) with a polling URL
+- Claude automatically polls for results every 5-10 seconds
+- Estimated completion time: ~90 seconds
+- No timeout issues for long-running AI analysis
+
 ### Perform Complete Security Audit
 
 **Cost**: $0.15-0.70 USDC per audit (by model: DeepSeek/Sonnet/Fable)
 
-Get a comprehensive AI-powered security audit with detailed findings, severity levels, and remediation recommendations.
+Get a comprehensive AI-powered security audit with detailed findings, severity levels, and remediation recommendations. This process returns immediately with a polling URL, then Claude monitors the job until completion.
 
 #### Example 1: Full Security Audit
 
@@ -390,10 +397,11 @@ contract ExampleToken is ERC20, Ownable {
 ```
 
 Claude will:
-1. Generate a customized audit checklist (or use one you provide)
-2. Perform deep AI-powered security analysis
-3. Pay $0.15 USDC (DeepSeek), $0.25 (Sonnet), or $0.70 (Fable) automatically
-4. Return a comprehensive audit report with findings
+1. Submit your contract for comprehensive audit
+2. Pay $0.15 USDC (DeepSeek), $0.25 (Sonnet), or $0.70 (Fable) automatically
+3. Receive a polling URL and job ID
+4. Poll the job status every 5-10 seconds (estimated 120 seconds)
+5. Return a comprehensive audit report with findings
 
 **Model Options:**
 - **DeepSeek** (Budget): $0.15 USDC - Fast and cost-effective
@@ -409,6 +417,12 @@ Claude will:
   - Impact and risk assessment
   - Recommended remediations
 - Model used and tokens consumed
+
+**How it works:**
+- The endpoint returns immediately (202 Accepted) with a polling URL
+- Claude automatically polls for results every 5-10 seconds
+- Estimated completion time: ~120 seconds
+- No timeout issues for long-running AI analysis
 
 #### Example 2: Audit Workflow (Checklist + Audit)
 

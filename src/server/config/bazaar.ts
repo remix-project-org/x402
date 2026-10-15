@@ -289,7 +289,7 @@ contract Example {
 export const GET_AUDIT_CHECKLIST_METADATA = {
   resource: `${SERVER_BASE_URL}/get_audit_checklist`,
   type: "http" as const,
-  description: "AI-powered smart contract audit checklist matching - analyzes contract code and returns relevant security checklist items. PRICING (based on model): DeepSeek: $0.05 USDC, Sonnet: $0.15 USDC, Fable: $0.30 USDC. Payment must match selected model.",
+  description: "AI-powered smart contract audit checklist matching - analyzes contract code and returns relevant security checklist items. Returns immediately (202 Accepted) with a polling URL. Poll GET {jobStatusUrl} every 5-10 seconds until status is 'completed'. Estimated time: ~90 seconds. PRICING (based on model): DeepSeek: $0.05 USDC, Sonnet: $0.15 USDC, Fable: $0.30 USDC. Payment must match selected model.",
   accepts: [
     {
       asset: "USDC",
@@ -319,7 +319,7 @@ export const GET_AUDIT_CHECKLIST_METADATA = {
         input: {
           type: "http" as const,
           method: "POST",
-          description: "Get AI-matched security audit checklist for smart contracts. Analyzes contract code and returns relevant security categories from a comprehensive checklist. PRICING: DeepSeek ($0.05), Sonnet ($0.15), Fable ($0.30) - payment must match selected model.",
+          description: "Get AI-matched security audit checklist for smart contracts. Analyzes contract code and returns relevant security categories from a comprehensive checklist. Returns immediately (202 Accepted) with jobStatusUrl for polling. Poll GET {jobStatusUrl} every 5-10 seconds until status is 'completed' or 'failed'. Estimated completion: ~90 seconds. PRICING: DeepSeek ($0.05), Sonnet ($0.15), Fable ($0.30) - payment must match selected model.",
           bodyType: "json" as const,
           inputSchema: {
             type: "object",
@@ -374,12 +374,27 @@ contract MyToken {
         },
         output: {
           type: "json" as const,
+          description: "Initial response (202 Accepted) contains jobId and jobStatusUrl for polling. Poll the jobStatusUrl to retrieve the final result when status is 'completed'.",
           example: {
             success: true,
-            markdown: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol...",
-            matchedCategories: 5,
-            model: "openrouter/auto-beta",
-            tokensUsed: 3456
+            message: "Audit job created. Poll the jobStatusUrl to get results.",
+            jobId: "550e8400-e29b-41d4-a716-446655440000",
+            jobStatusUrl: "https://api.remix.live/mcp/x402-http/job/550e8400-e29b-41d4-a716-446655440000",
+            status: "pending",
+            estimatedCompletionSeconds: 90,
+            instructions: "Poll GET https://api.remix.live/mcp/x402-http/job/550e8400-e29b-41d4-a716-446655440000 every 5-10 seconds until status is 'completed' or 'failed'"
+          },
+          completedExample: {
+            jobId: "550e8400-e29b-41d4-a716-446655440000",
+            status: "completed",
+            endpoint: "/get_audit_checklist",
+            result: {
+              success: true,
+              markdown: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol...",
+              matchedCategories: 5,
+              model: "openrouter/auto-beta",
+              tokensUsed: 3456
+            }
           }
         }
       }
@@ -395,7 +410,7 @@ contract MyToken {
 export const DO_AUDIT_METADATA = {
   resource: `${SERVER_BASE_URL}/do_audit`,
   type: "http" as const,
-  description: "Complete AI-powered smart contract security audit - analyzes code against checklist and provides detailed findings with severity levels. PRICING (based on model): DeepSeek: $0.15 USDC, Sonnet: $0.25 USDC, Fable: $0.70 USDC. Payment must match selected model.",
+  description: "Complete AI-powered smart contract security audit - analyzes code against checklist and provides detailed findings with severity levels. Returns immediately (202 Accepted) with a polling URL. Poll GET {jobStatusUrl} every 5-10 seconds until status is 'completed'. Estimated time: ~120 seconds. PRICING (based on model): DeepSeek: $0.15 USDC, Sonnet: $0.25 USDC, Fable: $0.70 USDC. Payment must match selected model.",
   accepts: [
     {
       asset: "USDC",
@@ -425,7 +440,7 @@ export const DO_AUDIT_METADATA = {
         input: {
           type: "http" as const,
           method: "POST",
-          description: "Perform comprehensive security audit of smart contracts. Takes contract sources and audit checklist, returns detailed findings with severity levels, recommendations, and full markdown report. PRICING: DeepSeek ($0.15), Sonnet ($0.25), Fable ($0.70) - payment must match selected model.",
+          description: "Perform comprehensive security audit of smart contracts. Takes contract sources and audit checklist, returns detailed findings with severity levels, recommendations, and full markdown report. Returns immediately (202 Accepted) with jobStatusUrl for polling. Poll GET {jobStatusUrl} every 5-10 seconds until status is 'completed' or 'failed'. Estimated completion: ~120 seconds. PRICING: DeepSeek ($0.15), Sonnet ($0.25), Fable ($0.70) - payment must match selected model.",
           bodyType: "json" as const,
           inputSchema: {
             type: "object",
@@ -478,19 +493,34 @@ contract MyToken {
         },
         output: {
           type: "json" as const,
+          description: "Initial response (202 Accepted) contains jobId and jobStatusUrl for polling. Poll the jobStatusUrl to retrieve the final audit report when status is 'completed'.",
           example: {
             success: true,
-            markdown: "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\n...\n\n## Findings\n\n### High Severity\n\n...",
-            findingsCount: 5,
-            severity: {
-              critical: 0,
-              high: 2,
-              medium: 2,
-              low: 1,
-              informational: 0
-            },
-            model: "openrouter/auto-beta",
-            tokensUsed: 5678
+            message: "Audit job created. Poll the jobStatusUrl to get results.",
+            jobId: "650e8400-e29b-41d4-a716-446655440001",
+            jobStatusUrl: "https://api.remix.live/mcp/x402-http/job/650e8400-e29b-41d4-a716-446655440001",
+            status: "pending",
+            estimatedCompletionSeconds: 120,
+            instructions: "Poll GET https://api.remix.live/mcp/x402-http/job/650e8400-e29b-41d4-a716-446655440001 every 5-10 seconds until status is 'completed' or 'failed'"
+          },
+          completedExample: {
+            jobId: "650e8400-e29b-41d4-a716-446655440001",
+            status: "completed",
+            endpoint: "/do_audit",
+            result: {
+              success: true,
+              markdown: "# Complete Security Audit Report\n\n**Contract**: MyToken.sol\n\n## Executive Summary\n\n...\n\n## Findings\n\n### High Severity\n\n...",
+              findingsCount: 5,
+              severity: {
+                critical: 0,
+                high: 2,
+                medium: 2,
+                low: 1,
+                informational: 0
+              },
+              model: "openrouter/auto-beta",
+              tokensUsed: 5678
+            }
           }
         }
       }

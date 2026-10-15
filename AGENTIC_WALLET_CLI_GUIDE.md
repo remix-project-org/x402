@@ -71,14 +71,18 @@ Run Slither security analysis on smart contracts
 - **Endpoint**: `https://api.remix.live/mcp/x402-http/analyze`
 
 ### POST /get_audit_checklist
-Get a customized security audit checklist based on contract structure and patterns
+Get a customized security audit checklist based on contract structure and patterns (returns immediately with polling URL)
 - **Price**: 0.05-0.30 USDC (by model: DeepSeek/Sonnet/Fable)
 - **Endpoint**: `https://api.remix.live/mcp/x402-http/get_audit_checklist`
+- **Returns**: Job ID and polling URL (202 Accepted)
+- **Polling**: GET `/job/:jobId` to retrieve results
 
 ### POST /do_audit
-Perform a comprehensive AI-powered security audit with detailed findings and severity levels
+Perform a comprehensive AI-powered security audit with detailed findings and severity levels (returns immediately with polling URL)
 - **Price**: 0.15-0.70 USDC (by model: DeepSeek/Sonnet/Fable)
 - **Endpoint**: `https://api.remix.live/mcp/x402-http/do_audit`
+- **Returns**: Job ID and polling URL (202 Accepted)
+- **Polling**: GET `/job/:jobId` to retrieve results
 
 ## Quick Start
 
@@ -137,7 +141,8 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/analyze" \
 #### Get Audit Checklist
 
 ```bash
-npx awal x402 pay "https://api.remix.live/mcp/x402-http/get_audit_checklist" \
+# Step 1: Submit audit checklist job (returns immediately with polling URL)
+RESPONSE=$(npx awal x402 pay "https://api.remix.live/mcp/x402-http/get_audit_checklist" \
   --method POST \
   --data '{
     "model": "DeepSeek",
@@ -147,15 +152,43 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/get_audit_checklist" \
       }
     },
     "maxCategories": 12
-  }'
+  }')
+
+# Extract polling URL
+POLL_URL=$(echo $RESPONSE | jq -r .jobStatusUrl)
+echo "Job submitted. Polling: $POLL_URL"
+
+# Step 2: Poll for results (every 5-10 seconds until completed)
+while true; do
+  STATUS_RESPONSE=$(curl -s $POLL_URL)
+  STATUS=$(echo $STATUS_RESPONSE | jq -r .status)
+
+  if [ "$STATUS" = "completed" ]; then
+    echo "✓ Checklist generation completed!"
+    echo $STATUS_RESPONSE | jq -r .result.markdown
+    break
+  elif [ "$STATUS" = "failed" ]; then
+    echo "✗ Checklist generation failed"
+    echo $STATUS_RESPONSE | jq -r .error
+    exit 1
+  else
+    echo "Status: $STATUS - waiting..."
+    sleep 5
+  fi
+done
 ```
 
-**Note**: Use `"model": "DeepSeek"` (0.05 USDC), `"Sonnet"` (0.15 USDC), or `"Fable"` (0.30 USDC) to select the AI model.
+**Note**:
+- Use `"model": "DeepSeek"` (0.05 USDC), `"Sonnet"` (0.15 USDC), or `"Fable"` (0.30 USDC)
+- The endpoint returns immediately (202 Accepted) with a polling URL
+- Poll the URL every 5-10 seconds until status is "completed" or "failed"
+- Estimated completion: ~90 seconds
 
 #### Perform Complete Audit
 
 ```bash
-npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
+# Step 1: Submit audit job (returns immediately with polling URL)
+RESPONSE=$(npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
   --method POST \
   --data '{
     "model": "DeepSeek",
@@ -165,10 +198,40 @@ npx awal x402 pay "https://api.remix.live/mcp/x402-http/do_audit" \
       }
     },
     "checklist": "## Access Control\\n- [ ] Owner privileges are properly restricted\\n- [ ] Role-based access control is implemented correctly\\n\\n## Token Economics\\n- [ ] Max supply cap is enforced\\n- [ ] Minting logic is secure\\n\\n## Blacklist Mechanism\\n- [ ] Blacklist cannot be bypassed\\n- [ ] Events are emitted for transparency"
-  }'
+  }')
+
+# Extract polling URL
+POLL_URL=$(echo $RESPONSE | jq -r .jobStatusUrl)
+echo "Audit job submitted. Polling: $POLL_URL"
+
+# Step 2: Poll for results (every 5-10 seconds until completed)
+while true; do
+  STATUS_RESPONSE=$(curl -s $POLL_URL)
+  STATUS=$(echo $STATUS_RESPONSE | jq -r .status)
+
+  if [ "$STATUS" = "completed" ]; then
+    echo "✓ Audit completed!"
+    echo $STATUS_RESPONSE | jq -r .result.markdown
+    echo ""
+    echo "Findings summary:"
+    echo $STATUS_RESPONSE | jq .result.severity
+    break
+  elif [ "$STATUS" = "failed" ]; then
+    echo "✗ Audit failed"
+    echo $STATUS_RESPONSE | jq -r .error
+    exit 1
+  else
+    echo "Status: $STATUS - waiting..."
+    sleep 5
+  fi
+done
 ```
 
-**Note**: Use `"model": "DeepSeek"` (0.15 USDC), `"Sonnet"` (0.25 USDC), or `"Fable"` (0.70 USDC) to select the AI model.
+**Note**:
+- Use `"model": "DeepSeek"` (0.15 USDC), `"Sonnet"` (0.25 USDC), or `"Fable"` (0.70 USDC)
+- The endpoint returns immediately (202 Accepted) with a polling URL
+- Poll the URL every 5-10 seconds until status is "completed" or "failed"
+- Estimated completion: ~120 seconds
 
 ## Key Information
 
