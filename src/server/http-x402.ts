@@ -10,8 +10,6 @@
 
 import http from "http";
 import { URL } from "url";
-import { gzip } from "zlib";
-import { promisify } from "util";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { getActiveNetwork } from "./config/network.js";
@@ -41,61 +39,25 @@ import {
   deleteJob
 } from "./utils/job-store.js";
 
-const gzipAsync = promisify(gzip);
-
 const HTTP_X402_PORT = process.env.HTTP_X402_PORT ? parseInt(process.env.HTTP_X402_PORT) : 8002;
 
 /**
- * Check if client accepts gzip encoding
+ * Send JSON response
+ * Note: Gzip compression removed - job polling handles large responses asynchronously
  */
-function acceptsGzip(req: http.IncomingMessage): boolean {
-  const acceptEncoding = req.headers['accept-encoding'] || '';
-  return acceptEncoding.includes('gzip');
-}
-
-/**
- * Send JSON response with optional gzip compression
- * Automatically compresses if client accepts gzip and response is large enough
- */
-async function sendJsonResponse(
+function sendJsonResponse(
   res: http.ServerResponse,
   statusCode: number,
   data: any,
-  headers: Record<string, string> = {},
-  req?: http.IncomingMessage
-): Promise<void> {
-  const jsonString = JSON.stringify(data);
-  const shouldCompress = req && acceptsGzip(req) && jsonString.length > 1024; // Compress if > 1KB
-
+  headers: Record<string, string> = {}
+): void {
   const responseHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...headers
   };
 
-  if (shouldCompress) {
-    try {
-      const compressed = await gzipAsync(jsonString);
-      responseHeaders["Content-Encoding"] = "gzip";
-      responseHeaders["Content-Length"] = String(compressed.length);
-
-      httpLogger.debug({
-        originalSize: jsonString.length,
-        compressedSize: compressed.length,
-        compressionRatio: (compressed.length / jsonString.length * 100).toFixed(1) + '%'
-      }, 'Response compressed with gzip');
-
-      res.writeHead(statusCode, responseHeaders);
-      res.end(compressed);
-    } catch (error) {
-      // Fallback to uncompressed if compression fails
-      httpLogger.warn({ error }, 'Gzip compression failed, sending uncompressed');
-      res.writeHead(statusCode, responseHeaders);
-      res.end(jsonString);
-    }
-  } else {
-    res.writeHead(statusCode, responseHeaders);
-    res.end(jsonString);
-  }
+  res.writeHead(statusCode, responseHeaders);
+  res.end(JSON.stringify(data));
 }
 
 /**
@@ -234,7 +196,27 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
 }
 
 /**
- * Create x402 v2 payment required response
+ * Create x402 v2 payment required response for HTTP 402 RESPONSE BODY
+ *
+ * This function creates the full, detailed response object that is sent in the
+ * HTTP 402 response body when a client makes a request without payment.
+ *
+ * Purpose:
+ * - Provides complete API documentation to the client
+ * - Includes full input/output schemas and examples
+ * - Contains Bazaar discovery extensions for API exploration
+ * - Human-readable and developer-friendly
+ *
+ * Used for: res.end(JSON.stringify(v2Response))
+ *
+ * @param resourceUrl - The endpoint URL
+ * @param description - Endpoint description
+ * @param amount - Payment amount required
+ * @param inputSchema - JSON schema for request body
+ * @param inputExample - Example request payload
+ * @param outputExample - Example response payload
+ * @param endpointTags - Tags for categorization/filtering
+ * @returns Full x402 v2 response object with schemas and metadata
  */
 function createPaymentRequiredResponse(resourceUrl: string, description: string, amount: string, inputSchema: any, inputExample: any, outputExample: any, endpointTags?: string[]) {
   const network = getActiveNetwork();
@@ -246,6 +228,7 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
       url: resourceUrl,
       description: description,
       mimeType: "application/json",
+      tags: endpointTags || SERVICE_METADATA.tags,  // Tags inside resource object
     },
     // Service metadata at top level for CDP Bazaar indexing
     description: SERVICE_METADATA.description,
@@ -284,7 +267,31 @@ function createPaymentRequiredResponse(resourceUrl: string, description: string,
 }
 
 /**
- * Create v2 payment requirements for header
+ * Create v2 payment requirements for PAYMENT-REQUIRED HTTP HEADER
+ *
+ * This function creates a minimal, compact requirements object that is base64-encoded
+ * and sent in the PAYMENT-REQUIRED HTTP header of 402 responses.
+ *
+ * Purpose:
+ * - Machine-readable payment requirements for processors/indexers
+ * - Compact format to reduce header size
+ * - Essential payment information only
+ * - Used by agentic.market and other x402 indexers for cataloging
+ *
+ * Used for: "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions)
+ *
+ * Difference from createPaymentRequiredResponse():
+ * - No input/output schemas (smaller size)
+ * - No examples (reduces header bloat)
+ * - Can optionally include extensions from v2Response
+ * - Designed for header transmission, not body
+ *
+ * @param resource - The endpoint URL
+ * @param amount - Payment amount required
+ * @param extensions - Optional extensions object (usually from v2Response.extensions)
+ * @param description - Optional endpoint description
+ * @param endpointTags - Tags for categorization/filtering
+ * @returns Minimal x402 v2 requirements object for header encoding
  */
 function createPaymentRequirements(resource: string, amount: string, extensions?: any, description?: string, endpointTags?: string[]) {
   const network = getActiveNetwork();
@@ -296,6 +303,7 @@ function createPaymentRequirements(resource: string, amount: string, extensions?
       url: resource,
       mimeType: "application/json",
       ...(description && { description }),
+      tags: endpointTags || SERVICE_METADATA.tags,  // Tags inside resource object
     },
     // Service metadata at top level for CDP Bazaar indexing
     description: SERVICE_METADATA.description,
@@ -536,6 +544,8 @@ contract MyToken {
 
   // Create v2Response and requirements with extensions
   const endpointTags = COMPILE_SOLIDITY_METADATA.tags;
+
+  // v2Response: Full response object with schemas/examples for HTTP response BODY
   const v2Response = createPaymentRequiredResponse(
     resource,
     description,
@@ -546,6 +556,7 @@ contract MyToken {
     endpointTags
   );
 
+  // requirementsWithExtensions: Minimal object for PAYMENT-REQUIRED HEADER (base64 encoded)
   const requirementsWithExtensions = createPaymentRequirements(resource, amount, v2Response.extensions, description, endpointTags);
 
   if (!paymentSignature) {
@@ -553,9 +564,9 @@ contract MyToken {
     httpLogger.info({ path, stage: 'payment_required' }, 'No payment provided, returning 402');
     res.writeHead(402, {
       "Content-Type": "application/json",
-      "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),
+      "PAYMENT-REQUIRED": encodePaymentRequirements(requirementsWithExtensions),  // Header: minimal requirements
     });
-    res.end(JSON.stringify(v2Response, null, 2));
+    res.end(JSON.stringify(v2Response, null, 2));  // Body: full response with schemas
     logResponseSent(method, path, 402, Date.now() - startTime, false);
     return;
   }
@@ -924,7 +935,7 @@ contract Example {
 /**
  * Handle /job/:id endpoint - Poll for job status and results (FREE, no payment required)
  */
-async function handleJobStatus(req: http.IncomingMessage, res: http.ServerResponse, jobId: string) {
+async function handleJobStatus(res: http.ServerResponse, jobId: string) {
   try {
     const job = getJob(jobId);
 
@@ -941,7 +952,7 @@ async function handleJobStatus(req: http.IncomingMessage, res: http.ServerRespon
     // Return job status
     if (job.status === "pending" || job.status === "processing") {
       // Still processing
-      await sendJsonResponse(res, 200, {
+      sendJsonResponse(res, 200, {
         jobId: job.id,
         status: job.status,
         endpoint: job.endpoint,
@@ -951,10 +962,10 @@ async function handleJobStatus(req: http.IncomingMessage, res: http.ServerRespon
         message: job.status === "pending" ? "Job is queued" : "Job is processing",
         pollingUrl: job.pollingUrl,
         instructions: "Continue polling this URL every 5-10 seconds"
-      }, {}, req);
+      });
     } else if (job.status === "completed") {
       // Completed successfully - return results
-      await sendJsonResponse(res, 200, {
+      sendJsonResponse(res, 200, {
         jobId: job.id,
         status: "completed",
         endpoint: job.endpoint,
@@ -963,7 +974,7 @@ async function handleJobStatus(req: http.IncomingMessage, res: http.ServerRespon
         completedAt: job.completedAt ? new Date(job.completedAt).toISOString() : undefined,
         processingSeconds: job.completedAt ? Math.floor((job.completedAt - job.createdAt) / 1000) : undefined,
         result: job.result
-      }, {}, req);
+      });
 
       // Delete job after successful retrieval (one-time use)
       httpLogger.info({ jobId }, "Job results retrieved, deleting job");
@@ -1661,7 +1672,7 @@ contract MyToken {
     })).toString("base64");
 
     // Return immediately with job ID and polling URL
-    await sendJsonResponse(res, 202, {
+    sendJsonResponse(res, 202, {
       success: true,
       message: "Audit job created. Poll the jobStatusUrl to get results.",
       jobId: job.id,
@@ -1671,7 +1682,7 @@ contract MyToken {
       instructions: `Poll GET ${job.pollingUrl} every 5-10 seconds until status is 'completed' or 'failed'`
     }, {
       "PAYMENT-RESPONSE": paymentResponseHeader,
-    }, req);
+    });
 
     // Process in background (don't await)
     processAuditChecklistAsync(
@@ -2028,7 +2039,7 @@ contract MyToken {
     })).toString("base64");
 
     // Return immediately with job ID and polling URL
-    await sendJsonResponse(res, 202, {
+    sendJsonResponse(res, 202, {
       success: true,
       message: "Audit job created. Poll the jobStatusUrl to get results.",
       jobId: job.id,
@@ -2038,7 +2049,7 @@ contract MyToken {
       instructions: `Poll GET ${job.pollingUrl} every 5-10 seconds until status is 'completed' or 'failed'`
     }, {
       "PAYMENT-RESPONSE": paymentResponseHeader,
-    }, req);
+    });
 
     // Process in background (don't await)
     processDoAuditAsync(
@@ -2169,7 +2180,7 @@ export function startHttpX402Server() {
       } else if (url.pathname.startsWith("/job/") && req.method === "GET") {
         // Job status polling endpoint (FREE, no payment required)
         const jobId = url.pathname.substring(5); // Extract job ID from /job/:id
-        await handleJobStatus(req, res, jobId);
+        await handleJobStatus(res, jobId);
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
