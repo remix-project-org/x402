@@ -934,6 +934,11 @@ contract Example {
 
 /**
  * Handle /job/:id endpoint - Poll for job status and results (FREE, no payment required)
+ *
+ * Job retention policy:
+ * - Pending/processing jobs: Expire after 10 minutes from creation
+ * - Completed/failed jobs: Retained for 5 minutes after completion, then auto-deleted
+ * - Jobs can be polled multiple times within the retention window
  */
 async function handleJobStatus(res: http.ServerResponse, jobId: string) {
   try {
@@ -944,7 +949,7 @@ async function handleJobStatus(res: http.ServerResponse, jobId: string) {
       res.end(JSON.stringify({
         error: "Job not found",
         jobId,
-        message: "Job may have expired or never existed. Jobs expire after 10 minutes or 5 minutes after completion."
+        message: "Job may have expired or never existed. Completed jobs are retained for 5 minutes, pending jobs for 10 minutes."
       }));
       return;
     }
@@ -976,9 +981,9 @@ async function handleJobStatus(res: http.ServerResponse, jobId: string) {
         result: job.result
       });
 
-      // Delete job after successful retrieval (one-time use)
-      httpLogger.info({ jobId }, "Job results retrieved, deleting job");
-      deleteJob(jobId);
+      // Don't delete immediately - let it expire naturally after COMPLETED_JOB_RETENTION_MS (5 minutes)
+      // This allows clients to re-poll if needed without getting 404
+      httpLogger.info({ jobId }, "Job results retrieved successfully");
     } else if (job.status === "failed") {
       // Failed - return error
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -993,9 +998,9 @@ async function handleJobStatus(res: http.ServerResponse, jobId: string) {
         message: "Job processing failed"
       }));
 
-      // Delete failed job after retrieval
-      httpLogger.info({ jobId }, "Failed job retrieved, deleting job");
-      deleteJob(jobId);
+      // Don't delete immediately - let it expire naturally after COMPLETED_JOB_RETENTION_MS (5 minutes)
+      // This allows clients to re-poll or retrieve error details without getting 404
+      httpLogger.info({ jobId }, "Failed job retrieved");
     }
 
   } catch (error: any) {
