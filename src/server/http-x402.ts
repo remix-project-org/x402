@@ -1215,7 +1215,7 @@ Please perform a complete security audit of the above contracts against the prov
     const openRouterResult = await callOpenRouterJSON<AuditResponse>({
       systemMessage,
       userMessage,
-      maxTokens: 32768,
+      maxTokens: 65536,  // Increased from 32768 to handle larger contracts
       temperature: 0.7,
       primaryModel: openRouterModelId,
       skipValidation: true,
@@ -1236,6 +1236,27 @@ Please perform a complete security audit of the above contracts against the prov
     const findings = auditData.findings || [];
     const summary = auditData.summary || "No summary provided";
     const recommendations = auditData.recommendations || [];
+
+    // Validate that we got meaningful results - empty results likely indicate model failure
+    const hasFindings = findings.length > 0;
+    const hasMeaningfulSummary = summary && summary !== "No summary provided" && summary.trim().length > 20;
+    const hasRecommendations = recommendations.length > 0;
+
+    if (!hasFindings && !hasMeaningfulSummary && !hasRecommendations) {
+      const contractSize = Object.values(sources).reduce((sum, s) => sum + s.content.split('\n').length, 0);
+      const errorMsg = `Audit failed: AI model returned empty results (0 findings, no summary, no recommendations). Contract size: ${contractSize} nSLOC, Tokens used: ${tokensUsed}. This typically indicates the contract exceeds the model's effective analysis capacity. Try: (1) Use a smaller contract, (2) Break into multiple files, or (3) Use the Fable model for larger contracts.`;
+      httpLogger.error({
+        jobId,
+        model,
+        tokensUsed,
+        contractSize,
+        hasFindings,
+        hasMeaningfulSummary,
+        summaryLength: summary.length
+      }, "Empty audit results - model likely failed to analyze contract");
+      failJob(jobId, errorMsg);
+      return;
+    }
 
     // Count findings by severity
     const severityCounts = {

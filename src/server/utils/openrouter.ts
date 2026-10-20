@@ -356,10 +356,47 @@ export async function callOpenRouterJSON<T = any>(
       const parsed = JSON.parse(result.content) as T;
       return { ...result, parsed };
     } catch (error) {
+      // Log detailed parsing error for debugging
+      console.error("❌ JSON Parse Error Details:");
+      console.error(`   Content length: ${result.content.length} chars`);
+      console.error(`   Content preview (first 250 chars): ${result.content.substring(0, 250)}`);
+      console.error(`   Content preview (last 250 chars): ${result.content.substring(Math.max(0, result.content.length - 250))}`);
+      console.error(`   Parse error: ${error instanceof Error ? error.message : String(error)}`);
+
+      // Attempt to repair truncated JSON by closing unclosed arrays/objects
+      let repairedContent = result.content.trim();
+
+      // Count opening and closing brackets/braces
+      const openBraces = (repairedContent.match(/\{/g) || []).length;
+      const closeBraces = (repairedContent.match(/\}/g) || []).length;
+      const openBrackets = (repairedContent.match(/\[/g) || []).length;
+      const closeBrackets = (repairedContent.match(/\]/g) || []).length;
+
+      // If truncated mid-JSON, try to close it
+      if (openBraces > closeBraces || openBrackets > closeBrackets) {
+        console.log(`   Attempting to repair truncated JSON (missing ${openBrackets - closeBrackets} ] and ${openBraces - closeBraces} })`);
+
+        // Close arrays first, then objects
+        for (let i = 0; i < (openBrackets - closeBrackets); i++) {
+          repairedContent += ']';
+        }
+        for (let i = 0; i < (openBraces - closeBraces); i++) {
+          repairedContent += '}';
+        }
+
+        try {
+          const repairedParsed = JSON.parse(repairedContent) as T;
+          console.log(`   ✅ Successfully repaired truncated JSON`);
+          return { ...result, parsed: repairedParsed, content: repairedContent };
+        } catch (repairError) {
+          console.error(`   ❌ JSON repair failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`);
+        }
+      }
+
       return {
         ...result,
         success: false,
-        error: "Failed to parse JSON response",
+        error: `Failed to parse JSON response (length: ${result.content.length} chars, likely truncated or malformed). Attempted repair failed.`,
       };
     }
   }
