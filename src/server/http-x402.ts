@@ -26,9 +26,18 @@ import {
   type AuditMatch
 } from "./utils/audit-checklist.js";
 import {
-  callOpenRouterJSON,
+  callOpenRouterWithSchema,
   mapModelName
 } from "./utils/openrouter.js";
+import {
+  zodToJsonSchema,
+  validateAuditChecklistResponse,
+  validateDoAuditResponse,
+  AuditChecklistResponseSchema,
+  DoAuditResponseSchema,
+  type AuditChecklistResponse,
+  type DoAuditResponse
+} from "./utils/audit-schemas.js";
 import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVerification, logResponseSent } from "./utils/logger.js";
 import {
   createJob,
@@ -1078,17 +1087,20 @@ Return a JSON object with this structure:
   "skipped_reason": "optional explanation if no matches"
 }`;
 
-    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter");
+    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter with structured output");
 
-    // Call OpenRouter API with user-selected model
-    const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
+    // Call OpenRouter API with user-selected model using structured JSON Schema output
+    // This ensures the LLM response conforms to our exact structure (prevents empty/malformed outputs)
+    const jsonSchema = zodToJsonSchema(AuditChecklistResponseSchema, "audit_checklist_response");
+
+    const openRouterResult = await callOpenRouterWithSchema<AuditChecklistResponse>({
       systemMessage,
       userMessage,
       maxTokens: 32768,
       temperature: 0.7,
       primaryModel: openRouterModelId,
       skipValidation: true,
-    });
+    }, jsonSchema, validateAuditChecklistResponse);
 
     if (!openRouterResult.success || !openRouterResult.parsed) {
       const errorMsg = openRouterResult.error || "Unknown error";
@@ -1208,23 +1220,20 @@ ${contractsSection}
 
 Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
 
-    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter");
+    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter with structured output");
 
-    // Call OpenRouter API with user-selected model
-    interface AuditResponse {
-      findings: any[];
-      summary: string;
-      recommendations: string[];
-    }
+    // Call OpenRouter API with user-selected model using structured JSON Schema output
+    // This ensures the LLM response conforms to our exact structure (prevents empty/malformed outputs)
+    const jsonSchema = zodToJsonSchema(DoAuditResponseSchema, "audit_report_response");
 
-    const openRouterResult = await callOpenRouterJSON<AuditResponse>({
+    const openRouterResult = await callOpenRouterWithSchema<DoAuditResponse>({
       systemMessage,
       userMessage,
       maxTokens: 65536,  // Increased from 32768 to handle larger contracts
       temperature: 0.7,
       primaryModel: openRouterModelId,
       skipValidation: true,
-    });
+    }, jsonSchema, validateDoAuditResponse);
 
     if (!openRouterResult.success || !openRouterResult.parsed) {
       const errorMsg = openRouterResult.error || "Unknown error";
@@ -1325,6 +1334,7 @@ Please perform a complete security audit of the above contracts against the prov
 
         for (let i = 0; i < severityFindings.length; i++) {
           const finding = severityFindings[i];
+          if (!finding) continue; // Skip if undefined
 
           const title = finding.title || 'Untitled Finding';
           const description = finding.description || 'No description provided';
