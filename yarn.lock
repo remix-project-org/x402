@@ -581,6 +581,14 @@
   resolved "https://registry.yarnpkg.com/@hono/node-server/-/node-server-1.19.14.tgz#e30f844bc77e3ce7be442aac3b1f73ad8b58d181"
   integrity sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==
 
+"@instructor-ai/instructor@^1.7.0":
+  version "1.7.0"
+  resolved "https://registry.yarnpkg.com/@instructor-ai/instructor/-/instructor-1.7.0.tgz#073781b790ae073e4c34d8fd1d26731494463db7"
+  integrity sha512-7ifu2ZzFBMSOtkY2X5dd2RCxQvfO6Bx+Ag/9V+FkamLGGGciazlTKsEyQR6KSn7BXADLWLIDV296S+O+CifE/A==
+  dependencies:
+    zod-stream "3.0.0"
+    zod-validation-error "^3.4.0"
+
 "@isaacs/cliui@^8.0.2":
   version "8.0.2"
   resolved "https://registry.yarnpkg.com/@isaacs/cliui/-/cliui-8.0.2.tgz#b37667b7bc181c168782259bab42474fbf52b550"
@@ -6042,6 +6050,11 @@ onetime@^5.1.2:
   dependencies:
     mimic-fn "^2.1.0"
 
+openai@^7.43.0:
+  version "7.43.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-7.43.0.tgz#4cbc59539fb49b339ad0c04a0ed91ce7fe5617f2"
+  integrity sha512-fBjKaDFG8AVfkGYoIo/E+xNRlNk7nx2nQ9GoQtXfePzPjg4QcT6nejkhXayJnEwSpFGfthOrAPI2KXj5yAqg9A==
+
 openapi-fetch@^0.13.5:
   version "0.13.8"
   resolved "https://registry.yarnpkg.com/openapi-fetch/-/openapi-fetch-0.13.8.tgz#1769da06e30d19f7568cd0e60db8ca61ea83a2fa"
@@ -6542,6 +6555,11 @@ radix3@^1.1.2:
   resolved "https://registry.yarnpkg.com/radix3/-/radix3-1.1.2.tgz#fd27d2af3896c6bf4bcdfab6427c69c2afc69ec0"
   integrity sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA==
 
+ramda@^0.29.0:
+  version "0.29.1"
+  resolved "https://registry.yarnpkg.com/ramda/-/ramda-0.29.1.tgz#408a6165b9555b7ba2fc62555804b6c5a2eca196"
+  integrity sha512-OfxIeWzd4xdUNxlWhgFazxsA/nl3mS4/jGZI5n00uWOoSSFRhC1b6gl6xvmzUamgmqELraWp0J/qqVlXYPDPyA==
+
 range-parser@^1.2.1:
   version "1.2.1"
   resolved "https://registry.yarnpkg.com/range-parser/-/range-parser-1.2.1.tgz#3cf37023d199e1c24d1a55b84800c2f3e6468031"
@@ -6699,6 +6717,13 @@ safe-stable-stringify@^2.1.0, safe-stable-stringify@^2.3.1:
   version "2.1.2"
   resolved "https://registry.yarnpkg.com/safer-buffer/-/safer-buffer-2.1.2.tgz#44fa161b0187b9549dd84bb91802f9bd8385cd6a"
   integrity sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==
+
+schema-stream@^3.2.2:
+  version "3.2.2"
+  resolved "https://registry.yarnpkg.com/schema-stream/-/schema-stream-3.2.2.tgz#65c025c02e7cf6fa87aeb30c5ff6d4b4f058ee8a"
+  integrity sha512-7hwI/4lbo8sOs7sRbKW9Bh+5qPHOj12tVpskHq1tYakVlWEpdLgeEKXXgzGLaAP1Bw+DcoB4DmdA7/nSxGI5OA==
+  dependencies:
+    ramda "^0.29.0"
 
 secure-json-parse@^4.0.0:
   version "4.1.0"
@@ -7836,10 +7861,23 @@ yoctocolors@^2.1.1:
   resolved "https://registry.yarnpkg.com/yoctocolors/-/yoctocolors-2.1.2.tgz#d795f54d173494e7d8db93150cec0ed7f678c83a"
   integrity sha512-CzhO+pFNo8ajLM2d2IW/R93ipy99LWjtwblvC1RsoSUMZgyLbYFr221TnSNT7GjGdYui6P459mw9JH/g/zW2ug==
 
-zod-to-json-schema@^3.24.1, zod-to-json-schema@^3.24.6, zod-to-json-schema@^3.25.0, zod-to-json-schema@^3.25.1:
+zod-stream@3.0.0:
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/zod-stream/-/zod-stream-3.0.0.tgz#caa8e3d67217f5d1dce8cc170c413b615b42ddf0"
+  integrity sha512-BfW8KI+FCEMQOAIf8Qgc2q67iZ+LZ/zzk7alU45FWiZIrBSt0JMxNVGuc3o1yTpGFVk3zXiHt3TZvmUiad/9nw==
+  dependencies:
+    schema-stream "^3.2.2"
+    zod-to-json-schema "^3.23.1"
+
+zod-to-json-schema@^3.23.1, zod-to-json-schema@^3.24.1, zod-to-json-schema@^3.24.6, zod-to-json-schema@^3.25.0, zod-to-json-schema@^3.25.1:
   version "3.25.2"
   resolved "https://registry.yarnpkg.com/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz#3fa799a7badd554541472fb65843fdc460b2e5aa"
   integrity sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==
+
+zod-validation-error@^3.4.0:
+  version "3.5.4"
+  resolved "https://registry.yarnpkg.com/zod-validation-error/-/zod-validation-error-3.5.4.tgz#9072f829e4b45b9e27317c3002408c0c4cdd2bb4"
+  integrity sha512-+hEiRIiPobgyuFlEojnqjJnhFvg4r/i3cqgcm67eehZf/WBaK3g6cD02YU9mtdVxZjv8CzCA9n/Rhrs3yAAvAw==
 
 zod@3.22.4:
   version "3.22.4"

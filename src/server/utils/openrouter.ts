@@ -402,7 +402,7 @@ export function mapModelName(modelName: string): string {
 /**
  * Convenience function for JSON responses
  *
- * @deprecated Use callOpenRouterWithSchema for structured outputs with validation
+ * @deprecated Use Instructor library (callInstructorWithFallback) for structured outputs with validation
  */
 export async function callOpenRouterJSON<T = any>(
   options: Omit<OpenRouterCallOptions, "responseFormat">
@@ -458,91 +458,6 @@ export async function callOpenRouterJSON<T = any>(
         ...result,
         success: false,
         error: `Failed to parse JSON response (length: ${result.content.length} chars, likely truncated or malformed). Attempted repair failed.`,
-      };
-    }
-  }
-
-  return result;
-}
-
-/**
- * Call OpenRouter with structured JSON Schema output and Zod validation
- *
- * This is the recommended way to call OpenRouter for structured outputs.
- * Benefits over callOpenRouterJSON:
- * - Enforces structure at LLM level (prevents empty/malformed responses)
- * - Type-safe with Zod validation
- * - Works with all models (DeepSeek, Sonnet, Fable)
- * - Prevents the "empty output after payment" issue
- *
- * @param options - OpenRouter call options (without responseFormat)
- * @param jsonSchema - JSON Schema definition for structured output
- * @param validator - Optional Zod validator function for additional validation
- * @returns Promise with parsed and validated data
- *
- * @example
- * ```typescript
- * import { zodToJsonSchema, validateAuditChecklistResponse } from './audit-schemas';
- *
- * const result = await callOpenRouterWithSchema({
- *   systemMessage: "You are an auditor",
- *   userMessage: "Analyze this contract",
- *   primaryModel: "anthropic/claude-sonnet-5.5",
- *   maxTokens: 32768
- * }, zodToJsonSchema(AuditChecklistResponseSchema, "audit_checklist"), validateAuditChecklistResponse);
- * ```
- */
-export async function callOpenRouterWithSchema<T = any>(
-  options: Omit<OpenRouterCallOptions, "responseFormat">,
-  jsonSchema: JsonSchemaDefinition,
-  validator?: (data: unknown) => T
-): Promise<OpenRouterResponse & { parsed?: T }> {
-  // Call OpenRouter with json_schema response format
-  const result = await callOpenRouterWithFallback({
-    ...options,
-    responseFormat: {
-      type: "json_schema",
-      jsonSchema: jsonSchema
-    },
-  });
-
-  if (result.success) {
-    try {
-      // Parse JSON response
-      const jsonData = JSON.parse(result.content);
-
-      // If validator provided, use it for type-safe validation
-      if (validator) {
-        try {
-          const validated = validator(jsonData);
-          return { ...result, parsed: validated };
-        } catch (validationError: any) {
-          console.error("❌ Zod Validation Error:");
-          console.error(`   Error: ${validationError.message || String(validationError)}`);
-          if (validationError.errors) {
-            console.error(`   Details:`, JSON.stringify(validationError.errors, null, 2));
-          }
-
-          return {
-            ...result,
-            success: false,
-            error: `Response validation failed: ${validationError.message || "Invalid structure"}`,
-          };
-        }
-      }
-
-      // No validator, return parsed JSON
-      return { ...result, parsed: jsonData as T };
-
-    } catch (parseError: any) {
-      console.error("❌ JSON Parse Error (should not happen with json_schema mode):");
-      console.error(`   Content length: ${result.content.length} chars`);
-      console.error(`   Parse error: ${parseError.message}`);
-
-      return {
-        ...result,
-        success: false,
-        error: `Failed to parse structured output: ${parseError.message}`,
       };
     }
   }
