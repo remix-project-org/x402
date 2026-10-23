@@ -261,7 +261,7 @@ Match the contract against relevant categories.`;
     maxTokens: 32768,
     temperature: 0.7,
     maxRetries: 3,
-    mode: "TOOLS" // TOOLS mode works best for Claude Sonnet
+    mode: "JSON_SCHEMA" // JSON_SCHEMA mode for OpenRouter compatibility
   });
 }
 
@@ -312,6 +312,6 @@ Perform a comprehensive security audit.`;
     maxTokens: 65536, // Larger for full audit reports
     temperature: 0.7,
     maxRetries: 3,
-    mode: "TOOLS"
+    mode: "JSON_SCHEMA" // JSON_SCHEMA mode for OpenRouter compatibility
   });
 }

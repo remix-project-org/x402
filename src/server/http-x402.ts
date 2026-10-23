@@ -1097,7 +1097,7 @@ Return a JSON object with this structure:
       maxTokens: 32768,
       temperature: 0.7,
       maxRetries: 3,
-      mode: "TOOLS"
+      mode: "JSON_SCHEMA"
     });
 
     if (!instructorResult.success || !instructorResult.data) {
@@ -1230,7 +1230,7 @@ Please perform a complete security audit of the above contracts against the prov
       maxTokens: 65536,  // Increased from 32768 to handle larger contracts
       temperature: 0.7,
       maxRetries: 3,
-      mode: "TOOLS"
+      mode: "JSON_SCHEMA"
     });
 
     if (!instructorResult.success || !instructorResult.data) {
