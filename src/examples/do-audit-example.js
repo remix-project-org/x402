@@ -22,44 +22,17 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Example contract with various security considerations
-const EXAMPLE_CONTRACT = `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+// Load large test contract from file for testing
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-/**
- * Example Token Contract with multiple security considerations
- */
-contract ExampleToken is ERC20, Ownable {
-    uint256 public maxSupply = 1000000 * 10**18;
-    mapping(address => bool) public blacklisted;
-
-    event Blacklisted(address indexed account);
-    event Minted(address indexed to, uint256 amount);
-
-    constructor() ERC20("Example Token", "EXMP") Ownable(msg.sender) {
-        _mint(msg.sender, 100000 * 10**18);
-    }
-
-    function mint(address to, uint256 amount) external onlyOwner {
-        require(totalSupply() + amount <= maxSupply, "Exceeds max supply");
-        require(!blacklisted[to], "Address is blacklisted");
-        _mint(to, amount);
-        emit Minted(to, amount);
-    }
-
-    function blacklist(address account) external onlyOwner {
-        blacklisted[account] = true;
-        emit Blacklisted(account);
-    }
-
-    function _update(address from, address to, uint256 value) internal virtual override {
-        require(!blacklisted[from] && !blacklisted[to], "Blacklisted address");
-        super._update(from, to, value);
-    }
-}`;
+// Load the 1000+ line test contract
+const LARGE_CONTRACT_PATH = join(__dirname, '../../test-contract-1000-lines.sol');
+const EXAMPLE_CONTRACT = readFileSync(LARGE_CONTRACT_PATH, 'utf-8');
 
 /**
  * Poll a job endpoint until completion
@@ -168,10 +141,13 @@ async function main() {
 
     // Prepare contract sources
     const sources = {
-      "ExampleToken.sol": {
+      "TestContract.sol": {
         content: EXAMPLE_CONTRACT
       }
     };
+
+    const contractLines = EXAMPLE_CONTRACT.split('\n').length;
+    const contractChars = EXAMPLE_CONTRACT.length;
 
     console.log("\n" + "=".repeat(50));
     console.log("STEP 1: Get Audit Checklist");
@@ -180,7 +156,7 @@ async function main() {
     console.log("📝 Analyzing contract structure to get relevant checklist items...");
     console.log(`   Endpoint: ${getChecklistEndpoint}`);
     console.log(`   Model: ${selectedModel}`);
-    console.log("   Contract: ExampleToken.sol");
+    console.log(`   Contract: TestContract.sol (${contractLines} lines, ${contractChars} chars)`);
     console.log();
 
     // Step 1: Call get_audit_checklist endpoint
