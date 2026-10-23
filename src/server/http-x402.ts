@@ -26,9 +26,15 @@ import {
   type AuditMatch
 } from "./utils/audit-checklist.js";
 import {
-  callOpenRouterJSON,
   mapModelName
 } from "./utils/openrouter.js";
+import {
+  AuditChecklistResponseSchema,
+  DoAuditResponseSchema
+} from "./utils/audit-schemas.js";
+import {
+  callInstructorWithFallback
+} from "./utils/instructor-openrouter.js";
 import { httpLogger, paymentLogger, logError, logRequestReceived, logPaymentVerification, logResponseSent } from "./utils/logger.js";
 import {
   createJob,
@@ -1078,40 +1084,44 @@ Return a JSON object with this structure:
   "skipped_reason": "optional explanation if no matches"
 }`;
 
-    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter");
+    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit matching request to OpenRouter with Instructor (structured output)");
 
-    // Call OpenRouter API with user-selected model
-    const openRouterResult = await callOpenRouterJSON<{ matches: AuditMatch[]; skipped_reason?: string }>({
+    // Call OpenRouter API with Instructor for guaranteed structured outputs
+    // Instructor enforces schema validation at the LLM level, preventing malformed JSON
+    const instructorResult = await callInstructorWithFallback({
       systemMessage,
       userMessage,
+      schema: AuditChecklistResponseSchema,
+      schemaName: "audit_checklist_response",
+      modelName: requestedModel as "DeepSeek" | "Sonnet" | "Fable",
       maxTokens: 32768,
       temperature: 0.7,
-      primaryModel: openRouterModelId,
-      skipValidation: true,
+      maxRetries: 3,
+      mode: "JSON_SCHEMA"
     });
 
-    if (!openRouterResult.success || !openRouterResult.parsed) {
-      const errorMsg = openRouterResult.error || "Unknown error";
+    if (!instructorResult.success || !instructorResult.data) {
+      const errorMsg = instructorResult.error || "Unknown error";
       httpLogger.error({
         jobId,
         error: errorMsg,
-        attemptedModels: openRouterResult.attemptedModels
-      }, "OpenRouter request failed");
+        attemptedModels: instructorResult.attemptedModels
+      }, "Instructor request failed");
       failJob(jobId, `AI service request failed: ${errorMsg}`);
       return;
     }
 
-    const { parsed, model, tokensUsed } = openRouterResult;
+    const parsed = instructorResult.data;
+    const model = instructorResult.model || requestedModel;
     const matches = parsed.matches || [];
     const skippedReason = parsed.skipped_reason;
 
     httpLogger.info({
       jobId,
       model,
-      tokensUsed,
       matchedCategories: matches.length,
       topCategories: matches.slice(0, 3).map((m: any) => m.path.split('::').pop())
-    }, "Audit checklist matching completed successfully");
+    }, "Audit checklist matching completed successfully via Instructor");
 
     // Generate markdown report
     const contractName = contractSkeletons.map(c => c.filename).join(', ');
@@ -1123,8 +1133,7 @@ Return a JSON object with this structure:
       markdown: markdownReport,
       matchedCategories: matches.length,
       skippedReason: skippedReason,
-      model: model,
-      tokensUsed: tokensUsed
+      model: model
     });
 
   } catch (error: any) {
@@ -1208,36 +1217,35 @@ ${contractsSection}
 
 Please perform a complete security audit of the above contracts against the provided checklist. Identify all security issues, vulnerabilities, and concerns.`;
 
-    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter");
+    httpLogger.info({ jobId, selectedModel: requestedModel, openRouterModelId }, "Sending audit request to OpenRouter with Instructor (structured output)");
 
-    // Call OpenRouter API with user-selected model
-    interface AuditResponse {
-      findings: any[];
-      summary: string;
-      recommendations: string[];
-    }
-
-    const openRouterResult = await callOpenRouterJSON<AuditResponse>({
+    // Call OpenRouter API with Instructor for guaranteed structured outputs
+    // Instructor enforces schema validation at the LLM level, preventing malformed JSON
+    const instructorResult = await callInstructorWithFallback({
       systemMessage,
       userMessage,
+      schema: DoAuditResponseSchema,
+      schemaName: "audit_report_response",
+      modelName: requestedModel as "DeepSeek" | "Sonnet" | "Fable",
       maxTokens: 65536,  // Increased from 32768 to handle larger contracts
       temperature: 0.7,
-      primaryModel: openRouterModelId,
-      skipValidation: true,
+      maxRetries: 3,
+      mode: "JSON_SCHEMA"
     });
 
-    if (!openRouterResult.success || !openRouterResult.parsed) {
-      const errorMsg = openRouterResult.error || "Unknown error";
+    if (!instructorResult.success || !instructorResult.data) {
+      const errorMsg = instructorResult.error || "Unknown error";
       httpLogger.error({
         jobId,
         error: errorMsg,
-        attemptedModels: openRouterResult.attemptedModels
-      }, "OpenRouter request failed");
+        attemptedModels: instructorResult.attemptedModels
+      }, "Instructor request failed");
       failJob(jobId, `AI service request failed: ${errorMsg}`);
       return;
     }
 
-    const { parsed: auditData, model, tokensUsed } = openRouterResult;
+    const auditData = instructorResult.data;
+    const model = instructorResult.model || requestedModel;
     const findings = auditData.findings || [];
     const summary = auditData.summary || "No summary provided";
     const recommendations = auditData.recommendations || [];
@@ -1249,11 +1257,10 @@ Please perform a complete security audit of the above contracts against the prov
 
     if (!hasFindings && !hasMeaningfulSummary && !hasRecommendations) {
       const contractSize = Object.values(sources).reduce((sum, s) => sum + s.content.split('\n').length, 0);
-      const errorMsg = `Audit failed: AI model returned empty results (0 findings, no summary, no recommendations). Contract size: ${contractSize} nSLOC, Tokens used: ${tokensUsed}. This typically indicates the contract exceeds the model's effective analysis capacity. Try: (1) Use a smaller contract, (2) Break into multiple files, or (3) Use the Fable model for larger contracts.`;
+      const errorMsg = `Audit failed: AI model returned empty results (0 findings, no summary, no recommendations). Contract size: ${contractSize} nSLOC. This typically indicates the contract exceeds the model's effective analysis capacity. Try: (1) Use a smaller contract, (2) Break into multiple files, or (3) Use the Fable model for larger contracts.`;
       httpLogger.error({
         jobId,
         model,
-        tokensUsed,
         contractSize,
         hasFindings,
         hasMeaningfulSummary,
@@ -1275,7 +1282,6 @@ Please perform a complete security audit of the above contracts against the prov
     httpLogger.info({
       jobId,
       model,
-      tokensUsed,
       findingsCount: findings.length,
       severity: severityCounts,
       topFindings: findings.slice(0, 2).map((f: any) => `${f.severity}: ${f.title?.substring(0, 50) || 'N/A'}`)
@@ -1325,6 +1331,7 @@ Please perform a complete security audit of the above contracts against the prov
 
         for (let i = 0; i < severityFindings.length; i++) {
           const finding = severityFindings[i];
+          if (!finding) continue; // Skip if undefined
 
           const title = finding.title || 'Untitled Finding';
           const description = finding.description || 'No description provided';
@@ -1386,8 +1393,7 @@ Please perform a complete security audit of the above contracts against the prov
       markdown: markdownReport,
       findingsCount: findings.length,
       severity: severityCounts,
-      model: model,
-      tokensUsed: tokensUsed
+      model: model
     });
 
   } catch (error: any) {

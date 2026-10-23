@@ -76,9 +76,26 @@ export interface OpenRouterCallOptions {
   userMessage: string;
   maxTokens?: number;
   temperature?: number;
-  responseFormat?: { type: "json_object" | "text" };
+  responseFormat?:
+    | { type: "json_object" | "text" }
+    | { type: "json_schema"; jsonSchema: JsonSchemaDefinition };
   primaryModel: string; // Primary model to use (will use its configured fallbacks)
   skipValidation?: boolean; // Skip pre-request validation (for testing)
+}
+
+/**
+ * JSON Schema definition for structured outputs
+ * Used with OpenRouter's json_schema response format
+ */
+export interface JsonSchemaDefinition {
+  name: string;
+  strict: boolean;
+  schema: {
+    type: "object";
+    properties: Record<string, any>;
+    required: string[];
+    additionalProperties: boolean;
+  };
 }
 
 export interface OpenRouterResponse {
@@ -88,6 +105,7 @@ export interface OpenRouterResponse {
   tokensUsed: number;
   error?: string;
   attemptedModels?: string[];
+  finishReason?: string;  // "end_turn" = complete, "length" = truncated, "stop" = stop sequence
 }
 
 /**
@@ -219,6 +237,21 @@ export async function callOpenRouterWithFallback(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
+        // Build response format parameter based on type
+        let openRouterResponseFormat: any = undefined;
+        if (responseFormat) {
+          if (responseFormat.type === "json_schema") {
+            // Use OpenRouter's json_schema format with strict mode
+            openRouterResponseFormat = {
+              type: "json_schema",
+              json_schema: responseFormat.jsonSchema
+            };
+          } else {
+            // Use basic json_object or text format
+            openRouterResponseFormat = { type: responseFormat.type };
+          }
+        }
+
         // Make the API call with timeout
         const result = await Promise.race([
           openrouter.chat.send({
@@ -237,7 +270,7 @@ export async function callOpenRouterWithFallback(
               maxTokens,
               temperature,
               stream: false,
-              ...(responseFormat && { responseFormat }),
+              ...(openRouterResponseFormat && { responseFormat: openRouterResponseFormat }),
             }
           }),
           new Promise((_, reject) =>
@@ -247,6 +280,7 @@ export async function callOpenRouterWithFallback(
 
         // Extract response
         const content = result.choices?.[0]?.message?.content || "";
+        const finishReason = result.choices?.[0]?.finish_reason || "";
 
         // Try multiple paths for token usage (different SDK versions/models may use different formats)
         const tokensUsed =
@@ -260,7 +294,31 @@ export async function callOpenRouterWithFallback(
           throw new Error("Empty response from OpenRouter");
         }
 
-        console.log(`✅ Success with ${currentModel} (${tokensUsed} tokens)`);
+        // CRITICAL: Check if response was truncated
+        // finish_reason values:
+        // - "end_turn" or "stop" = Complete response ✅
+        // - "length" = Truncated due to max_tokens limit ❌
+        // - "content_filter" = Filtered by content policy ❌
+        if (finishReason === "length") {
+          console.error(`❌ Response truncated - finish_reason: "length"`);
+          console.error(`   Model: ${currentModel}`);
+          console.error(`   Tokens used: ${tokensUsed}`);
+          console.error(`   Content length: ${content.length} chars`);
+          console.error(`   This typically means:`);
+          console.error(`   1. max_tokens is too low for the request`);
+          console.error(`   2. Input + thinking tokens + output exceeds limit`);
+          console.error(`   3. For Claude: thinking tokens count against max_tokens`);
+
+          throw new Error(
+            `Response truncated (finish_reason: "length"). ` +
+            `The model hit the max_tokens limit before completing the response. ` +
+            `Used ${tokensUsed} tokens. Content may be incomplete or malformed JSON. ` +
+            `Try: (1) Reduce input size, (2) Increase max_tokens, or (3) Use a different model.`
+          );
+        }
+
+        // Log finish_reason for debugging
+        console.log(`✅ Success with ${currentModel} (${tokensUsed} tokens, finish_reason: "${finishReason}")`);
 
         return {
           success: true,
@@ -268,6 +326,7 @@ export async function callOpenRouterWithFallback(
           model: currentModel,
           tokensUsed,
           attemptedModels,
+          finishReason,
         };
 
       } catch (error: any) {
@@ -342,6 +401,8 @@ export function mapModelName(modelName: string): string {
 
 /**
  * Convenience function for JSON responses
+ *
+ * @deprecated Use Instructor library (callInstructorWithFallback) for structured outputs with validation
  */
 export async function callOpenRouterJSON<T = any>(
   options: Omit<OpenRouterCallOptions, "responseFormat">
