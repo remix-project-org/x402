@@ -392,8 +392,7 @@ contract MyToken {
               success: true,
               markdown: "# Security Audit Checklist Report\n\n**Contract**: MyToken.sol...",
               matchedCategories: 5,
-              model: "openrouter/auto-beta",
-              tokensUsed: 3456
+              model: "openrouter/auto-beta"
             }
           }
         }
@@ -518,8 +517,7 @@ contract MyToken {
                 low: 1,
                 informational: 0
               },
-              model: "openrouter/auto-beta",
-              tokensUsed: 5678
+              model: "openrouter/auto-beta"
             }
           }
         }
